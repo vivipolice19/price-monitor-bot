@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "eBay Price Checker"
+version = "1.0.0"
+id = "artifacts/ebay-price-checker"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23875
+
+[services.development]
+run = "pnpm --filter @workspace/ebay-price-checker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ebay-price-checker", "run", "build" ]
+publicDir = "artifacts/ebay-price-checker/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23875"
+BASE_PATH = "/"

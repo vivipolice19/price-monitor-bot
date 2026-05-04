@@ -1,0 +1,930 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: eBay Price Checker API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: research
+    description: eBay price research
+  - name: monitors
+    description: Price monitoring
+  - name: spreadsheet
+    description: Google Sheets integration
+  - name: ebay
+    description: eBay OAuth and listing operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /research:
+    post:
+      operationId: researchPrice
+      tags: [research]
+      summary: Research eBay item prices by URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResearchRequest"
+      responses:
+        "200":
+          description: Price research results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /monitors:
+    get:
+      operationId: listMonitors
+      tags: [monitors]
+      summary: List all price monitors
+      responses:
+        "200":
+          description: List of monitors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Monitor"
+    post:
+      operationId: createMonitor
+      tags: [monitors]
+      summary: Create a new price monitor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMonitorRequest"
+      responses:
+        "201":
+          description: Monitor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Monitor"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /monitors/{id}:
+    get:
+      operationId: getMonitor
+      tags: [monitors]
+      summary: Get a specific monitor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Monitor details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitorDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMonitor
+      tags: [monitors]
+      summary: Delete a monitor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateMonitor
+      tags: [monitors]
+      summary: Update monitor settings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMonitorRequest"
+      responses:
+        "200":
+          description: Updated monitor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Monitor"
+
+  /monitors/{id}/check:
+    post:
+      operationId: checkMonitorNow
+      tags: [monitors]
+      summary: Manually trigger a price check for a monitor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckResult"
+
+  /monitors/{id}/history:
+    get:
+      operationId: getMonitorHistory
+      tags: [monitors]
+      summary: Get price history for a monitor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Price history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PriceHistory"
+
+  /spreadsheet/config:
+    get:
+      operationId: getSpreadsheetConfig
+      tags: [spreadsheet]
+      summary: Get current spreadsheet configuration
+      responses:
+        "200":
+          description: Spreadsheet config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpreadsheetConfig"
+    post:
+      operationId: saveSpreadsheetConfig
+      tags: [spreadsheet]
+      summary: Save spreadsheet configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpreadsheetConfigRequest"
+      responses:
+        "200":
+          description: Config saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpreadsheetConfig"
+
+  /spreadsheet/test:
+    post:
+      operationId: testSpreadsheetConnection
+      tags: [spreadsheet]
+      summary: Test Google Sheets connection
+      responses:
+        "200":
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
+  /spreadsheet/sync:
+    post:
+      operationId: syncToSpreadsheet
+      tags: [spreadsheet]
+      summary: Manually sync all alerts to spreadsheet
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+
+  /spreadsheet/row/{row}:
+    get:
+      operationId: getSpreadsheetRow
+      tags: [spreadsheet]
+      summary: Read a row from spreadsheet to get my price
+      parameters:
+        - name: row
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Row data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpreadsheetRowData"
+        "400":
+          description: Not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /spreadsheet/monitors/sync:
+    post:
+      operationId: syncMonitorsFromSources
+      tags: [spreadsheet]
+      summary: Sync monitors from spreadsheet, inventory API, link rows, hydrate conditions
+      responses:
+        "200":
+          description: Full sync pipeline result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncPipelineResult"
+
+  /spreadsheet/inventory/sync:
+    post:
+      operationId: syncInventoryProducts
+      tags: [spreadsheet]
+      summary: Pull product list from Mercari→eBay inventory checker and merge into monitors
+      responses:
+        "200":
+          description: Inventory merge counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventorySyncResult"
+
+  /spreadsheet/inventory/remote-sync:
+    post:
+      operationId: triggerRemoteInventorySync
+      tags: [spreadsheet]
+      summary: Ask remote inventory app to run spreadsheet sync (/api/sheets/sync)
+      responses:
+        "200":
+          description: Remote sync trigger result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteInventorySyncResult"
+
+  /ebay/oauth/authorize-url:
+    get:
+      operationId: getEbayOAuthAuthorizeUrl
+      tags: [ebay]
+      summary: Build eBay OAuth authorization URL (user opens in browser)
+      responses:
+        "200":
+          description: URL to redirect user to eBay consent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EbayOAuthAuthorizeResponse"
+        "400":
+          description: Not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ebay/oauth/callback:
+    get:
+      operationId: ebayOAuthCallback
+      tags: [ebay]
+      summary: OAuth redirect target — stores refresh token in DB
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML confirmation page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [monitors]
+      summary: List all price alerts
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  /alerts/{id}/resolve:
+    post:
+      operationId: resolveAlert
+      tags: [monitors]
+      summary: Mark an alert as resolved
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alert resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    ResearchRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          description: eBay item URL
+        myPrice:
+          type: number
+          description: Your current listing price (optional)
+      required:
+        - url
+
+    ProductIdentifiers:
+      type: object
+      properties:
+        upc:
+          type: array
+          items:
+            type: string
+        ean:
+          type: array
+          items:
+            type: string
+        isbn:
+          type: array
+          items:
+            type: string
+        mpn:
+          type: string
+        brand:
+          type: string
+        epid:
+          type: string
+
+    EbayItem:
+      type: object
+      properties:
+        itemId:
+          type: string
+        title:
+          type: string
+        price:
+          type: number
+        currency:
+          type: string
+        condition:
+          type: string
+        conditionId:
+          type: string
+        seller:
+          type: string
+        url:
+          type: string
+        shippingCost:
+          type: number
+        totalPrice:
+          type: number
+        imageUrl:
+          type: string
+        location:
+          type: string
+        identifiers:
+          $ref: "#/components/schemas/ProductIdentifiers"
+      required:
+        - itemId
+        - title
+        - price
+        - currency
+        - condition
+        - url
+        - totalPrice
+
+    ResearchResult:
+      type: object
+      properties:
+        originalItem:
+          $ref: "#/components/schemas/EbayItem"
+        lowestByCondition:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/EbayItem"
+        allItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/EbayItem"
+        evidenceUrls:
+          type: array
+          items:
+            type: string
+        searchedAt:
+          type: string
+          format: date-time
+      required:
+        - originalItem
+        - lowestByCondition
+        - allItems
+        - evidenceUrls
+        - searchedAt
+
+    CreateMonitorRequest:
+      type: object
+      properties:
+        ebayUrl:
+          type: string
+        myPrice:
+          type: number
+        myCondition:
+          type: string
+        label:
+          type: string
+        spreadsheetRow:
+          type: integer
+          description: Row number in spreadsheet to update
+        inventoryProductId:
+          type: integer
+        checkIntervalMinutes:
+          type: integer
+          default: 360
+      required:
+        - ebayUrl
+        - myPrice
+        - myCondition
+
+    UpdateMonitorRequest:
+      type: object
+      properties:
+        myPrice:
+          type: number
+        myCondition:
+          type: string
+        label:
+          type: string
+        spreadsheetRow:
+          type: integer
+        inventoryProductId:
+          type: integer
+          nullable: true
+        checkIntervalMinutes:
+          type: integer
+        isActive:
+          type: boolean
+
+    Monitor:
+      type: object
+      properties:
+        id:
+          type: integer
+        ebayUrl:
+          type: string
+        myPrice:
+          type: number
+        myCondition:
+          type: string
+        label:
+          type: string
+        spreadsheetRow:
+          type: integer
+        inventoryProductId:
+          type: integer
+        checkIntervalMinutes:
+          type: integer
+        isActive:
+          type: boolean
+        currentLowestPrice:
+          type: number
+        currentLowestCondition:
+          type: string
+        lastCheckedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        hasAlert:
+          type: boolean
+      required:
+        - id
+        - ebayUrl
+        - myPrice
+        - myCondition
+        - isActive
+        - createdAt
+        - hasAlert
+
+    MonitorDetail:
+      allOf:
+        - $ref: "#/components/schemas/Monitor"
+        - type: object
+          properties:
+            recentHistory:
+              type: array
+              items:
+                $ref: "#/components/schemas/PriceHistory"
+            activeAlerts:
+              type: array
+              items:
+                $ref: "#/components/schemas/Alert"
+
+    CheckResult:
+      type: object
+      properties:
+        monitorId:
+          type: integer
+        lowestPrice:
+          type: number
+        lowestCondition:
+          type: string
+        myPrice:
+          type: number
+        alertTriggered:
+          type: boolean
+        repricedTo:
+          type: number
+        evidenceUrls:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+      required:
+        - monitorId
+        - lowestPrice
+        - myPrice
+        - alertTriggered
+        - evidenceUrls
+        - checkedAt
+
+    PriceHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+        monitorId:
+          type: integer
+        lowestPrice:
+          type: number
+        lowestCondition:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - monitorId
+        - lowestPrice
+        - checkedAt
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        monitorId:
+          type: integer
+        monitorLabel:
+          type: string
+        competitorPrice:
+          type: number
+        competitorCondition:
+          type: string
+        myPrice:
+          type: number
+        priceDiff:
+          type: number
+        isResolved:
+          type: boolean
+        spreadsheetSynced:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - monitorId
+        - competitorPrice
+        - myPrice
+        - priceDiff
+        - isResolved
+        - spreadsheetSynced
+        - createdAt
+
+    SpreadsheetConfigRequest:
+      type: object
+      properties:
+        spreadsheetId:
+          type: string
+        sheetName:
+          type: string
+        alertColumnIndex:
+          type: integer
+          description: Column index (0-based) for price alert
+        priceColumnIndex:
+          type: integer
+          description: Column index (0-based) for competitor price write-back
+        myPriceColumnIndex:
+          type: integer
+          description: Column index (0-based) where my own price is stored in the sheet
+        sourceUrlColumnIndex:
+          type: integer
+        ebayUrlColumnIndex:
+          type: integer
+        lowestPriceColumnIndex:
+          type: integer
+        lowestConditionColumnIndex:
+          type: integer
+        lastCheckColumnIndex:
+          type: integer
+        alertStatusColumnIndex:
+          type: integer
+        repricedValueColumnIndex:
+          type: integer
+        evidenceUrlsColumnIndex:
+          type: integer
+        autoRepriceEnabled:
+          type: boolean
+        undercutAmount:
+          type: number
+        minAllowedPrice:
+          type: number
+        ebayAppId:
+          type: string
+        ebayDevId:
+          type: string
+        ebayCertId:
+          type: string
+        ebayUserToken:
+          type: string
+        inventoryCheckerBaseUrl:
+          type: string
+        inventoryCheckerApiKey:
+          type: string
+        inventoryStatusColumnIndex:
+          type: integer
+        ebayListingConditionColumnIndex:
+          type: integer
+          nullable: true
+        ebayOAuthRedirectUri:
+          type: string
+        ebayOAuthClientSecret:
+          type: string
+        serviceAccountJson:
+          type: string
+          description: Google Service Account JSON (stored securely)
+      required:
+        - spreadsheetId
+        - sheetName
+
+    SpreadsheetConfig:
+      type: object
+      properties:
+        spreadsheetId:
+          type: string
+        sheetName:
+          type: string
+        alertColumnIndex:
+          type: integer
+        priceColumnIndex:
+          type: integer
+        myPriceColumnIndex:
+          type: integer
+        sourceUrlColumnIndex:
+          type: integer
+        ebayUrlColumnIndex:
+          type: integer
+        lowestPriceColumnIndex:
+          type: integer
+        lowestConditionColumnIndex:
+          type: integer
+        lastCheckColumnIndex:
+          type: integer
+        alertStatusColumnIndex:
+          type: integer
+        repricedValueColumnIndex:
+          type: integer
+        evidenceUrlsColumnIndex:
+          type: integer
+        autoRepriceEnabled:
+          type: boolean
+        undercutAmount:
+          type: number
+        minAllowedPrice:
+          type: number
+        hasEbayCredentials:
+          type: boolean
+        hasEbayOAuth:
+          type: boolean
+        inventoryCheckerBaseUrl:
+          type: string
+        hasInventoryCheckerApiKey:
+          type: boolean
+        inventoryStatusColumnIndex:
+          type: integer
+        ebayListingConditionColumnIndex:
+          type: integer
+        ebayOAuthRedirectUri:
+          type: string
+        isConfigured:
+          type: boolean
+        hasServiceAccount:
+          type: boolean
+      required:
+        - isConfigured
+        - hasServiceAccount
+
+    SpreadsheetRowData:
+      type: object
+      properties:
+        rowNumber:
+          type: integer
+        myPrice:
+          type: number
+        rawValue:
+          type: string
+        found:
+          type: boolean
+      required:
+        - rowNumber
+        - found
+
+    ConnectionTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        sheetTitle:
+          type: string
+      required:
+        - success
+        - message
+
+    SyncResult:
+      type: object
+      properties:
+        synced:
+          type: integer
+        failed:
+          type: integer
+        message:
+          type: string
+      required:
+        - synced
+        - failed
+        - message
+
+    SheetSyncCounts:
+      type: object
+      properties:
+        created:
+          type: integer
+        updated:
+          type: integer
+        skipped:
+          type: integer
+      required:
+        - created
+        - updated
+        - skipped
+
+    InventorySyncResult:
+      type: object
+      properties:
+        updated:
+          type: integer
+        created:
+          type: integer
+        skipped:
+          type: boolean
+      required:
+        - updated
+        - created
+        - skipped
+
+    SyncPipelineResult:
+      type: object
+      properties:
+        sheet:
+          $ref: "#/components/schemas/SheetSyncCounts"
+        inventory:
+          $ref: "#/components/schemas/InventorySyncResult"
+        hydratedConditions:
+          type: integer
+        linkedRows:
+          type: integer
+      required:
+        - sheet
+        - inventory
+        - hydratedConditions
+        - linkedRows
+
+    RemoteInventorySyncResult:
+      type: object
+      additionalProperties: true
+
+    EbayOAuthAuthorizeResponse:
+      type: object
+      properties:
+        authorizeUrl:
+          type: string
+      required:
+        - authorizeUrl

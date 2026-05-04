@@ -1,0 +1,323 @@
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useResearchPrice, useGetSpreadsheetRow, getGetSpreadsheetRowQueryKey } from "@workspace/api-client-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Loader2, Search, PlusCircle, ExternalLink, Package } from "lucide-react";
+import { CreateMonitorDialog } from "@/components/create-monitor-dialog";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+const formSchema = z.object({
+  url: z.string().url("有効なeBayのURLを入力してください"),
+  myPrice: z.string().optional(),
+  row: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+export function Research() {
+  const [selectedItemForMonitor, setSelectedItemForMonitor] = useState<any>(null);
+  const research = useResearchPrice();
+  
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      url: "",
+      myPrice: "",
+      row: "",
+    },
+  });
+
+  const rowValue = form.watch("row");
+  const { refetch: fetchRow, isFetching: isFetchingRow } = useGetSpreadsheetRow(rowValue ? Number(rowValue) : 0, {
+    query: {
+      enabled: false,
+      queryKey: getGetSpreadsheetRowQueryKey(rowValue ? Number(rowValue) : 0)
+    }
+  });
+
+  const handleFetchPrice = async () => {
+    if (!rowValue) return;
+    try {
+      const result = await fetchRow();
+      if (result.data && result.data.found && result.data.myPrice !== undefined) {
+        form.setValue("myPrice", result.data.myPrice.toString());
+      }
+    } catch (e) {
+      // Error handled silently here
+    }
+  };
+
+  function onSubmit(data: FormValues) {
+    research.mutate({
+      data: {
+        url: data.url,
+        myPrice: data.myPrice ? Number(data.myPrice) : undefined,
+      }
+    });
+  }
+
+  const result = research.data;
+
+  return (
+    <div className="p-8 max-w-[1400px] mx-auto space-y-8">
+      <div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Market Research</h1>
+        <p className="text-muted-foreground mt-2">Analyze competitor pricing and find undersell opportunities.</p>
+      </div>
+
+      <Card className="border-0 shadow-sm ring-1 ring-border/50 bg-white">
+        <CardContent className="p-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col md:flex-row items-end gap-5">
+              <FormField
+                control={form.control}
+                name="url"
+                render={({ field }) => (
+                  <FormItem className="flex-1 w-full">
+                    <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">eBay URL</FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://www.ebay.com/itm/..." className="h-11 font-mono text-sm shadow-sm focus-visible:ring-primary/30" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="flex gap-4 w-full md:w-auto">
+                <FormField
+                  control={form.control}
+                  name="row"
+                  render={({ field }) => (
+                    <FormItem className="w-24">
+                      <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Sheet Row</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Row #" className="h-11 tabular-nums focus-visible:ring-primary/30 shadow-sm" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="myPrice"
+                  render={({ field }) => (
+                    <FormItem className="w-36">
+                      <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">My Price ($)</FormLabel>
+                      <FormControl>
+                        <div className="relative flex">
+                          <Input type="number" step="0.01" placeholder="0.00" className="h-11 pl-6 font-mono tabular-nums shadow-sm focus-visible:ring-primary/30 rounded-r-none" {...field} />
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 font-medium">$</span>
+                          <Button 
+                            type="button" 
+                            variant="secondary" 
+                            onClick={handleFetchPrice} 
+                            disabled={!rowValue || isFetchingRow}
+                            className="h-11 rounded-l-none border-l-0 px-3 bg-muted hover:bg-muted/80 text-muted-foreground"
+                            title="Fetch price from row"
+                          >
+                            {isFetchingRow ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <Button type="submit" disabled={research.isPending} className="h-11 px-8 font-bold shadow-sm w-full md:w-auto">
+                {research.isPending ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing</>
+                ) : (
+                  <><Search className="mr-2 h-4 w-4" /> Analyze</>
+                )}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      {research.isError && (
+        <div className="bg-destructive/10 text-destructive border border-destructive/20 p-4 rounded-md font-medium text-sm flex items-center">
+          <div className="w-2 h-2 rounded-full bg-destructive mr-3"></div>
+          {(research.error as any)?.message || "Failed to analyze URL"}
+        </div>
+      )}
+
+      {result && (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <Card className="lg:col-span-1 border-0 shadow-sm ring-1 ring-border/50 overflow-hidden flex flex-col">
+              <div className="bg-sidebar p-4 border-b border-sidebar-border">
+                <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm uppercase">Original Listing</h3>
+              </div>
+              <CardContent className="p-0 flex-1 flex flex-col">
+                <div className="aspect-[4/3] bg-muted relative border-b">
+                  {result.originalItem.imageUrl ? (
+                    <img src={result.originalItem.imageUrl} alt={result.originalItem.title} className="w-full h-full object-contain p-4" />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/50">
+                      <Package className="h-12 w-12 mb-2" />
+                      <span className="text-xs font-medium uppercase">No Image</span>
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3">
+                    <Badge variant="secondary" className="bg-background/90 backdrop-blur-sm border-0 shadow-sm font-semibold">
+                      {result.originalItem.condition || "Unknown"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="p-5 flex-1 flex flex-col">
+                  <h3 className="font-semibold text-sm leading-snug mb-4 line-clamp-3 text-foreground/90" title={result.originalItem.title}>
+                    {result.originalItem.title}
+                  </h3>
+                  <div className="mt-auto">
+                    <div className="flex justify-between items-baseline mb-4">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Current Price</span>
+                      <span className="font-mono text-2xl font-extrabold tabular-nums">${result.originalItem.price.toFixed(2)}</span>
+                    </div>
+                    <Button variant="outline" className="w-full font-semibold border-primary/20 text-primary hover:bg-primary/5" asChild>
+                      <a href={result.originalItem.url} target="_blank" rel="noreferrer">
+                        View on eBay <ExternalLink className="ml-2 h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2 border-0 shadow-sm ring-1 ring-border/50 flex flex-col">
+              <div className="bg-sidebar p-4 border-b border-sidebar-border">
+                <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm uppercase">Lowest By Condition</h3>
+              </div>
+              <CardContent className="p-0 flex-1 bg-muted/10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5">
+                  {Object.entries(result.lowestByCondition).map(([condition, item]) => (
+                    <div key={condition} className="bg-card rounded-lg border shadow-sm overflow-hidden flex flex-col hover:border-primary/40 transition-colors">
+                      <div className="p-3 border-b bg-muted/30 flex justify-between items-center">
+                        <span className="font-bold text-sm truncate">{condition}</span>
+                        <Badge variant="outline" className="text-[10px] font-mono uppercase bg-background">Lowest</Badge>
+                      </div>
+                      <div className="p-4 flex gap-4">
+                        <div className="w-16 h-16 rounded bg-muted shrink-0 border overflow-hidden flex items-center justify-center">
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="h-6 w-6 text-muted-foreground/30" />
+                          )}
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center">
+                          <div className="font-mono text-xl font-extrabold text-primary tabular-nums">
+                            ${item.totalPrice.toFixed(2)}
+                          </div>
+                          <div className="text-xs text-muted-foreground font-medium mt-1 truncate">
+                            {item.seller || "Unknown Seller"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="px-4 py-3 bg-muted/20 border-t mt-auto">
+                        <Button size="sm" variant="default" className="w-full font-bold shadow-sm" onClick={() => setSelectedItemForMonitor(item)}>
+                          <PlusCircle className="mr-2 h-4 w-4" /> 監視
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {Object.keys(result.lowestByCondition).length === 0 && (
+                    <div className="col-span-full py-12 text-center text-muted-foreground font-medium">
+                      No competing items found.
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-0 shadow-sm ring-1 ring-border/50">
+            <div className="bg-sidebar p-4 border-b border-sidebar-border flex justify-between items-center">
+              <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm uppercase flex items-center">
+                All Listings <Badge variant="secondary" className="ml-3 bg-sidebar-accent text-sidebar-accent-foreground border-0">{result.allItems.length}</Badge>
+              </h3>
+            </div>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="hover:bg-muted/40">
+                      <TableHead className="w-12 text-center py-4"></TableHead>
+                      <TableHead className="w-48 py-4 font-semibold text-xs uppercase tracking-wider">Condition</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider text-right">Price</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider text-right">Shipping</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider text-right">Total</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider">Seller</TableHead>
+                      <TableHead className="text-right py-4 font-semibold text-xs uppercase tracking-wider">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.allItems.map((item, i) => (
+                      <TableRow key={`${item.itemId}-${i}`} className="group hover:bg-muted/20 transition-colors">
+                        <TableCell className="p-2">
+                          <div className="w-10 h-10 rounded border bg-card flex items-center justify-center overflow-hidden mx-auto">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="h-4 w-4 text-muted-foreground/30" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium text-sm p-4">
+                          {item.condition || "Unknown"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular-nums p-4 text-muted-foreground">${item.price.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-mono tabular-nums p-4 text-muted-foreground text-xs">
+                          {item.shippingCost ? `+$${item.shippingCost.toFixed(2)}` : "Free"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular-nums p-4 font-bold text-primary">${item.totalPrice.toFixed(2)}</TableCell>
+                        <TableCell className="p-4">
+                          <span className="inline-block max-w-[120px] truncate text-sm font-medium">{item.seller}</span>
+                        </TableCell>
+                        <TableCell className="p-4 text-right">
+                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" asChild>
+                              <a href={item.url} target="_blank" rel="noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                            <Button size="sm" variant="default" className="h-8 font-bold px-3 shadow-sm" onClick={() => setSelectedItemForMonitor(item)}>
+                              この価格で監視
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {selectedItemForMonitor && (
+        <CreateMonitorDialog 
+          open={!!selectedItemForMonitor} 
+          onOpenChange={(open) => !open && setSelectedItemForMonitor(null)}
+          defaultValues={{
+            ebayUrl: selectedItemForMonitor.url || form.getValues("url"),
+            myPrice: form.getValues("myPrice") ? Number(form.getValues("myPrice")) : selectedItemForMonitor.price,
+            spreadsheetRow: form.getValues("row") ? Number(form.getValues("row")) : undefined,
+            myCondition: selectedItemForMonitor.condition || "New",
+            label: selectedItemForMonitor.title,
+          }}
+        />
+      )}
+    </div>
+  );
+}
