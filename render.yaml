@@ -1,0 +1,16 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Create a PostgreSQL database in the Render dashboard, then set DATABASE_URL on this service.
+services:
+  - type: web
+    name: ebay-price-monitor-api
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: corepack enable && corepack prepare pnpm@9.15.5 --activate && pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build
+    startCommand: pnpm --filter @workspace/api-server run start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
