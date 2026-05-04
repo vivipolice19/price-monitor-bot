@@ -7,7 +7,7 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack enable && corepack prepare pnpm@9.15.5 --activate && NPM_CONFIG_MINIMUM_RELEASE_AGE=0 pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build
+    buildCommand: COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack enable && corepack prepare pnpm@9.15.5 --activate && NPM_CONFIG_MINIMUM_RELEASE_AGE=0 pnpm install && pnpm --filter @workspace/api-server run build
     # Avoid relying on pnpm being on PATH at runtime (Render runs start separately from build).
     startCommand: cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs
     healthCheckPath: /api/healthz
