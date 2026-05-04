@@ -7,7 +7,8 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack enable && corepack prepare pnpm@9.15.5 --activate && NPM_CONFIG_MINIMUM_RELEASE_AGE=0 pnpm install && pnpm --filter @workspace/api-server run build
+    # Render sets CI=true → pnpm treats install as frozen unless --no-frozen-lockfile. NODE_ENV=production skips devDependencies during install.
+    buildCommand: COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack enable && corepack prepare pnpm@9.15.5 --activate && NODE_ENV=development NPM_CONFIG_MINIMUM_RELEASE_AGE=0 pnpm install --no-frozen-lockfile && pnpm --filter @workspace/api-server run build
     # Avoid relying on pnpm being on PATH at runtime (Render runs start separately from build).
     startCommand: cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs
     healthCheckPath: /api/healthz
