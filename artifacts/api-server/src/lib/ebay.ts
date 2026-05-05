@@ -473,6 +473,37 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
   }
 }
 
+async function fetchPriceHintByFinding(itemId: string, appId: string): Promise<number | null> {
+  try {
+    const resp = await axios.get("https://svcs.ebay.com/services/search/FindingService/v1", {
+      params: {
+        "OPERATION-NAME": "findItemsAdvanced",
+        "SERVICE-VERSION": "1.0.0",
+        "SECURITY-APPNAME": appId,
+        "RESPONSE-DATA-FORMAT": "JSON",
+        keywords: itemId,
+        "paginationInput.entriesPerPage": "10",
+        sortOrder: "BestMatch",
+      },
+      timeout: 10000,
+    });
+    const items = resp.data?.findItemsAdvancedResponse?.[0]?.searchResult?.[0]?.item || [];
+    const same = items.find((it: any) => {
+      const url = String(it?.viewItemURL?.[0] ?? "");
+      const iid = extractItemIdFromUrl(url);
+      return iid === itemId;
+    });
+    const pick = same ?? items[0];
+    const p = parseFirstNumber(pick?.sellingStatus?.[0]?.currentPrice?.[0]?.__value__);
+    if (p && p > 0) return p;
+    const s = parseFirstNumber(pick?.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__) ?? 0;
+    if (p && p + s > 0) return p + s;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function searchItemsByTitleScrape(originalItem: EbayItem): Promise<EbayItem[]> {
   try {
     const keywords = encodeURIComponent(originalItem.title.split(" ").slice(0, 5).join(" "));
@@ -599,9 +630,19 @@ export async function researchEbayItem(
     throw new Error("商品情報を取得できませんでした。URLを確認してください。");
   }
 
+  // If listing detail fetch succeeded but price is missing/0, try Finding API hint.
+  if ((originalItem.totalPrice ?? 0) <= 0 && itemId && appId) {
+    const hinted = await fetchPriceHintByFinding(itemId, appId);
+    if (hinted && hinted > 0) {
+      originalItem.price = hinted;
+      originalItem.totalPrice = hinted;
+      originalItem.shippingCost = 0;
+    }
+  }
+
   const foundItems = await searchItemsByTitle(originalItem, appId);
 
-  const prelim = foundItems.filter((item) => {
+  let prelim = foundItems.filter((item) => {
     if (item.itemId && originalItem!.itemId && item.itemId === originalItem!.itemId) return true;
     const score = jaccardSimilarity(
       normalizeTitle(originalItem!.title),
@@ -609,6 +650,18 @@ export async function researchEbayItem(
     );
     return score >= 0.45;
   });
+
+  // Fallback: if no prelim matches, use broader title similarity.
+  if (prelim.length === 0) {
+    prelim = foundItems.filter((item) => {
+      if (!item.totalPrice || item.totalPrice <= 0) return false;
+      const score = jaccardSimilarity(
+        normalizeTitle(originalItem!.title),
+        normalizeTitle(item.title),
+      );
+      return score >= 0.2;
+    });
+  }
 
   if (appId && prelim.length) {
     await enrichItemsWithShoppingApi(prelim, appId, 4);
@@ -625,6 +678,13 @@ export async function researchEbayItem(
       );
       return score >= 0.28;
     });
+  }
+  // Last fallback: return top priced candidates so UI doesn't become empty.
+  if (allItems.length === 0) {
+    allItems = foundItems
+      .filter((item) => item.totalPrice > 0)
+      .sort((a, b) => a.totalPrice - b.totalPrice)
+      .slice(0, 12);
   }
 
   const lowestByCondition: Record<string, EbayItem> = {};
