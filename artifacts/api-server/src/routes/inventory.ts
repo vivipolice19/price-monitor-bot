@@ -100,13 +100,24 @@ router.post("/research", async (req, res) => {
       return;
     }
     let appId: string | undefined;
+    let devId: string | undefined;
+    let certId: string | undefined;
+    let userToken: string | undefined;
     try {
       const [c] = await db.select().from(spreadsheetConfigTable).limit(1);
       appId = c?.ebayAppId ?? undefined;
+      devId = c?.ebayDevId ?? undefined;
+      certId = c?.ebayCertId ?? undefined;
+      userToken = c?.ebayUserToken ?? undefined;
     } catch {
       appId = undefined;
     }
-    const result = await researchEbayItem(url, { appId: appId ?? process.env.EBAY_APP_ID });
+    const result = await researchEbayItem(url, {
+      appId: appId ?? process.env.EBAY_APP_ID,
+      devId,
+      certId,
+      userToken,
+    });
     res.json({
       inventoryProduct: {
         id: product.id,

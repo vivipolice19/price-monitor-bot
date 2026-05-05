@@ -241,6 +241,9 @@ async function performPriceCheck(monitorId: number): Promise<{
   const [config] = await db.select().from(spreadsheetConfigTable).limit(1);
   const { originalItem, lowestByCondition, allItems, evidenceUrls } = await researchEbayItem(monitor.ebayUrl, {
     appId: config?.ebayAppId,
+    devId: config?.ebayDevId,
+    certId: config?.ebayCertId,
+    userToken: config?.ebayUserToken,
   });
 
   let lowestPrice = Infinity;

@@ -27,6 +27,13 @@ export interface EbayItem {
   identifiers?: ProductIdentifiers;
 }
 
+type TradingCreds = {
+  appId?: string | null;
+  devId?: string | null;
+  certId?: string | null;
+  userToken?: string | null;
+};
+
 export function extractItemIdFromUrl(url: string): string | null {
   const patterns = [
     /\/itm\/(?:[^/]+\/)?(\d+)/,
@@ -128,6 +135,104 @@ async function fetchEbayItemByApi(itemId: string, appId: string): Promise<EbayIt
   }
 }
 
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+async function fetchEbayItemByTradingApi(itemId: string, creds: TradingCreds): Promise<EbayItem | null> {
+  const appId = creds.appId ?? process.env.EBAY_APP_ID ?? "";
+  const devId = creds.devId ?? process.env.EBAY_DEV_ID ?? "";
+  const certId = creds.certId ?? process.env.EBAY_CERT_ID ?? "";
+  const userToken = creds.userToken ?? process.env.EBAY_USER_TOKEN ?? "";
+  if (!appId || !devId || !certId || !userToken) return null;
+
+  const body = `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <eBayAuthToken>${xmlEscape(userToken)}</eBayAuthToken>
+  </RequesterCredentials>
+  <ItemID>${itemId}</ItemID>
+  <IncludeItemSpecifics>true</IncludeItemSpecifics>
+  <DetailLevel>ReturnAll</DetailLevel>
+</GetItemRequest>`;
+
+  try {
+    const response = await axios.post("https://api.ebay.com/ws/api.dll", body, {
+      timeout: 15000,
+      headers: {
+        "Content-Type": "text/xml",
+        "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+        "X-EBAY-API-CALL-NAME": "GetItem",
+        "X-EBAY-API-SITEID": "0",
+        "X-EBAY-API-APP-NAME": appId,
+        "X-EBAY-API-DEV-NAME": devId,
+        "X-EBAY-API-CERT-NAME": certId,
+      },
+      validateStatus: () => true,
+    });
+    const raw = String(response.data ?? "");
+    const $ = cheerio.load(raw, { xmlMode: true });
+    const ack = $("Ack").first().text().trim();
+    if (!(ack === "Success" || ack === "Warning")) {
+      logger.warn(
+        { itemId, ack, short: $("ShortMessage").first().text().trim(), long: $("LongMessage").first().text().trim() },
+        "eBay Trading GetItem failed",
+      );
+      return null;
+    }
+    const title = $("Item > Title").first().text().trim();
+    const price = parseFloat($("Item > CurrentPrice").first().text().trim() || "0");
+    const currency = $("Item > CurrentPrice").first().attr("currencyID") || "USD";
+    const shipping = parseFloat(
+      $("Item > ShippingDetails > ShippingServiceOptions > ShippingServiceCost").first().text().trim() ||
+        "0",
+    );
+    const condition = $("Item > ConditionDisplayName").first().text().trim() || "Unknown";
+    const url =
+      $("Item > ListingDetails > ViewItemURL").first().text().trim() || `https://www.ebay.com/itm/${itemId}`;
+    const imageUrl = $("Item > PictureDetails > PictureURL").first().text().trim() || undefined;
+    const seller = $("Item > Seller > UserID").first().text().trim() || undefined;
+    const location = $("Item > Location").first().text().trim() || undefined;
+
+    const itemSpecificsPairs = $("Item > ItemSpecifics > NameValueList")
+      .map((_, n) => ({
+        Name: $(n).find("Name").first().text(),
+        Value: $(n)
+          .find("Value")
+          .map((__, v) => $(v).text())
+          .get(),
+      }))
+      .get();
+    const identifiers = parseShoppingItemIdentifiers({
+      ProductDetails: { ProductReferenceID: $("Item > ProductListingDetails > ProductReferenceID").first().text() },
+      ItemSpecifics: { NameValueList: itemSpecificsPairs },
+    });
+
+    return {
+      itemId,
+      title,
+      price,
+      currency,
+      condition,
+      seller,
+      url,
+      shippingCost: shipping,
+      totalPrice: price + shipping,
+      imageUrl,
+      location,
+      identifiers,
+    };
+  } catch (err) {
+    logger.warn({ err, itemId }, "eBay Trading GetItem call failed");
+    return null;
+  }
+}
+
 async function scrapeEbayItem(url: string): Promise<EbayItem | null> {
   try {
     const resp = await axios.get(url, {
@@ -138,6 +243,11 @@ async function scrapeEbayItem(url: string): Promise<EbayItem | null> {
       },
       timeout: 15000,
     });
+
+    if (typeof resp.data === "string" && resp.data.includes("/splashui/challenge")) {
+      logger.warn({ url }, "eBay page challenge detected while scraping");
+      return null;
+    }
 
     const $ = cheerio.load(resp.data);
 
@@ -435,7 +545,7 @@ export async function fetchListingCondition(ebayUrl: string, appId?: string | nu
 
 export async function researchEbayItem(
   url: string,
-  options?: { appId?: string | null },
+  options?: { appId?: string | null; devId?: string | null; certId?: string | null; userToken?: string | null },
 ): Promise<{
   originalItem: EbayItem;
   lowestByCondition: Record<string, EbayItem>;
@@ -449,6 +559,15 @@ export async function researchEbayItem(
 
   if (itemId && appId) {
     originalItem = await fetchEbayItemByApi(itemId, appId);
+  }
+
+  if (!originalItem && itemId) {
+    originalItem = await fetchEbayItemByTradingApi(itemId, {
+      appId: options?.appId,
+      devId: options?.devId,
+      certId: options?.certId,
+      userToken: options?.userToken,
+    });
   }
 
   if (!originalItem) {
