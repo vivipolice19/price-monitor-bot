@@ -51,6 +51,15 @@ function normalizeToken(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function parseFirstNumber(raw: string | undefined | null): number | undefined {
+  if (!raw) return undefined;
+  const normalized = String(raw).replace(/,/g, "");
+  const m = normalized.match(/-?\d+(?:\.\d+)?/);
+  if (!m) return undefined;
+  const n = parseFloat(m[0]);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function parseShoppingItemIdentifiers(item: any): ProductIdentifiers {
   const ids: ProductIdentifiers = { upc: [], ean: [], isbn: [] };
   if (item?.ProductDetails?.ProductReferenceID) {
@@ -186,12 +195,17 @@ async function fetchEbayItemByTradingApi(itemId: string, creds: TradingCreds): P
       return null;
     }
     const title = $("Item > Title").first().text().trim();
-    const price = parseFloat($("Item > CurrentPrice").first().text().trim() || "0");
+    const price =
+      parseFirstNumber($("Item > CurrentPrice").first().text().trim()) ??
+      parseFirstNumber($("Item > ConvertedCurrentPrice").first().text().trim()) ??
+      parseFirstNumber($("Item > BuyItNowPrice").first().text().trim()) ??
+      parseFirstNumber($("Item > StartPrice").first().text().trim()) ??
+      0;
     const currency = $("Item > CurrentPrice").first().attr("currencyID") || "USD";
-    const shipping = parseFloat(
-      $("Item > ShippingDetails > ShippingServiceOptions > ShippingServiceCost").first().text().trim() ||
-        "0",
-    );
+    const shipping =
+      parseFirstNumber(
+        $("Item > ShippingDetails > ShippingServiceOptions > ShippingServiceCost").first().text().trim(),
+      ) ?? 0;
     const condition = $("Item > ConditionDisplayName").first().text().trim() || "Unknown";
     const url =
       $("Item > ListingDetails > ViewItemURL").first().text().trim() || `https://www.ebay.com/itm/${itemId}`;
@@ -261,7 +275,11 @@ async function scrapeEbayItem(url: string): Promise<EbayItem | null> {
       $('[data-testid="x-price-primary"] span').first().text().trim() ||
       $(".x-buybox__price span").first().text().trim();
 
-    const price = parseFloat(priceText.replace(/[^0-9.]/g, "")) || 0;
+    const price =
+      parseFirstNumber(priceText) ??
+      parseFirstNumber($('[itemprop="price"]').first().attr("content")) ??
+      parseFirstNumber($('[data-testid="x-price-primary"]').first().text()) ??
+      0;
 
     const shippingText =
       $(".ux-labels-values--shipping .ux-textspans").first().text().trim() ||
@@ -271,7 +289,7 @@ async function scrapeEbayItem(url: string): Promise<EbayItem | null> {
     if (shippingText.toLowerCase().includes("free")) {
       shippingCost = 0;
     } else {
-      shippingCost = parseFloat(shippingText.replace(/[^0-9.]/g, "")) || 0;
+      shippingCost = parseFirstNumber(shippingText) ?? 0;
     }
 
     const condition =
@@ -429,8 +447,11 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
     const items = searchResult?.searchResult?.[0]?.item || [];
 
     return items.map((item: any): EbayItem => {
-      const price = parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || "0");
-      const shipping = parseFloat(item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__ || "0");
+      const price =
+        parseFirstNumber(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__) ??
+        parseFirstNumber(item.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.__value__) ??
+        0;
+      const shipping = parseFirstNumber(item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__) ?? 0;
       return {
         itemId: item.itemId?.[0] || "",
         title: item.title?.[0] || "",
@@ -480,12 +501,12 @@ async function searchItemsByTitleScrape(originalItem: EbayItem): Promise<EbayIte
       const itemId = extractItemIdFromUrl(itemUrl) || "";
 
       const priceText = itemEl.find(".s-item__price").text().trim();
-      const price = parseFloat(priceText.replace(/[^0-9.]/g, "")) || 0;
+      const price = parseFirstNumber(priceText) ?? 0;
 
       const shippingText = itemEl.find(".s-item__shipping").text().trim();
       let shippingCost = 0;
       if (!shippingText.toLowerCase().includes("free")) {
-        shippingCost = parseFloat(shippingText.replace(/[^0-9.]/g, "")) || 0;
+        shippingCost = parseFirstNumber(shippingText) ?? 0;
       }
 
       const condition = itemEl.find(".SECONDARY_INFO").text().trim() || "Unknown";
@@ -593,7 +614,18 @@ export async function researchEbayItem(
     await enrichItemsWithShoppingApi(prelim, appId, 4);
   }
 
-  const allItems = prelim.filter((item) => isSameItemStrict(originalItem!, item));
+  let allItems = prelim.filter((item) => isSameItemStrict(originalItem!, item));
+  // Fallback: when strict filter removes everything, keep close title matches with valid price.
+  if (allItems.length === 0) {
+    allItems = prelim.filter((item) => {
+      if (!item.totalPrice || item.totalPrice <= 0) return false;
+      const score = jaccardSimilarity(
+        normalizeTitle(originalItem!.title),
+        normalizeTitle(item.title),
+      );
+      return score >= 0.28;
+    });
+  }
 
   const lowestByCondition: Record<string, EbayItem> = {};
   for (const item of allItems) {
