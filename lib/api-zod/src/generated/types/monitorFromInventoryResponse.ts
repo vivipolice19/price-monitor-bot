@@ -10,4 +10,6 @@ import type { Monitor } from "./monitor";
 export type MonitorFromInventoryResponse = Monitor & {
   /** True when an existing monitor for this inventory row was updated */
   updated?: boolean;
+  /** True when tracked target fields were written to sheet immediately */
+  spreadsheetSynced?: boolean;
 };

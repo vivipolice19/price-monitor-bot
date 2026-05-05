@@ -239,7 +239,7 @@ async function performPriceCheck(monitorId: number): Promise<{
 
   const myPrice = parseFloat(monitor.myPrice);
   const [config] = await db.select().from(spreadsheetConfigTable).limit(1);
-  const { lowestByCondition, allItems, evidenceUrls } = await researchEbayItem(monitor.ebayUrl, {
+  const { originalItem, lowestByCondition, allItems, evidenceUrls } = await researchEbayItem(monitor.ebayUrl, {
     appId: config?.ebayAppId,
   });
 
@@ -336,6 +336,9 @@ async function performPriceCheck(monitorId: number): Promise<{
         alertStatus: "要eBay停止",
         repricedValue: repricedTo,
         evidenceUrls,
+        trackedTargetUrl: monitor.ebayUrl,
+        trackedTargetCondition: originalItem.condition || monitor.myCondition,
+        trackedTargetPrice: originalItem.totalPrice,
       });
     }
 
@@ -352,6 +355,9 @@ async function performPriceCheck(monitorId: number): Promise<{
       checkedAt: new Date(),
       alertStatus: "正常",
       evidenceUrls,
+      trackedTargetUrl: monitor.ebayUrl,
+      trackedTargetCondition: originalItem.condition || monitor.myCondition,
+      trackedTargetPrice: originalItem.totalPrice,
     });
   }
 

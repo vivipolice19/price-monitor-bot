@@ -112,10 +112,14 @@ export function InventoryMonitorPage() {
       return;
     }
     const invUrl = activeProduct.ebay_url?.trim() ?? "";
+    const selectedCandidate = candidateEntries.find((c) => c.url === seedUrl);
     const body = {
       inventoryProductId: activeProduct.id,
       myCondition: myCondition.trim(),
       myPrice: price,
+      trackedTargetCondition: selectedCandidate?.condition ?? myCondition.trim(),
+      trackedTargetPrice: selectedCandidate?.total ?? price,
+      syncToSpreadsheetNow: true,
       seedEbayUrl:
         seedUrl.trim() && seedUrl.trim() !== invUrl ? seedUrl.trim() : undefined,
     };
@@ -125,7 +129,9 @@ export function InventoryMonitorPage() {
         onSuccess: (res) => {
           toast({
             title: res.updated ? "監視を更新しました" : "監視を登録しました",
-            description: `モニター ID ${res.id} / 起点URLは ${res.ebayUrl.slice(0, 48)}…`,
+            description: res.spreadsheetSynced
+              ? `モニター ID ${res.id}。追跡対象URL/価格をシートへ即時反映しました。`
+              : `モニター ID ${res.id} / 起点URLは ${res.ebayUrl.slice(0, 48)}…`,
           });
           queryClient.invalidateQueries({ queryKey: getListInventoryProductsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListMonitorsQueryKey() });

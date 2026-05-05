@@ -13,6 +13,12 @@ export interface CreateMonitorFromInventoryRequest {
   /** Defaults to inventory ebay_price_usd when omitted */
   myPrice?: number;
   myCondition: string;
+  /** Candidate condition selected by user */
+  trackedTargetCondition?: string;
+  /** Candidate current total price selected by user */
+  trackedTargetPrice?: number;
+  /** Write tracked target URL/condition/price to sheet immediately */
+  syncToSpreadsheetNow?: boolean;
   label?: string;
   spreadsheetRow?: number;
   checkIntervalMinutes?: number;

@@ -92,6 +92,12 @@ export interface CreateMonitorFromInventoryRequest {
   /** Defaults to inventory ebay_price_usd when omitted */
   myPrice?: number;
   myCondition: string;
+  /** Candidate condition selected by user */
+  trackedTargetCondition?: string;
+  /** Candidate current total price selected by user */
+  trackedTargetPrice?: number;
+  /** Write tracked target URL/condition/price to sheet immediately */
+  syncToSpreadsheetNow?: boolean;
   label?: string;
   spreadsheetRow?: number;
   checkIntervalMinutes?: number;
@@ -117,6 +123,8 @@ export interface Monitor {
 export type MonitorFromInventoryResponse = Monitor & {
   /** True when an existing monitor for this inventory row was updated */
   updated?: boolean;
+  /** True when tracked target fields were written to sheet immediately */
+  spreadsheetSynced?: boolean;
 };
 
 export interface CreateMonitorRequest {
@@ -196,6 +204,9 @@ export interface SpreadsheetConfigRequest {
   alertStatusColumnIndex?: number;
   repricedValueColumnIndex?: number;
   evidenceUrlsColumnIndex?: number;
+  trackedTargetUrlColumnIndex?: number;
+  trackedTargetConditionColumnIndex?: number;
+  trackedTargetPriceColumnIndex?: number;
   autoRepriceEnabled?: boolean;
   undercutAmount?: number;
   minAllowedPrice?: number;
@@ -227,6 +238,9 @@ export interface SpreadsheetConfig {
   alertStatusColumnIndex?: number;
   repricedValueColumnIndex?: number;
   evidenceUrlsColumnIndex?: number;
+  trackedTargetUrlColumnIndex?: number;
+  trackedTargetConditionColumnIndex?: number;
+  trackedTargetPriceColumnIndex?: number;
   autoRepriceEnabled?: boolean;
   undercutAmount?: number;
   minAllowedPrice?: number;

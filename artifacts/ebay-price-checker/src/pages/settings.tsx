@@ -30,7 +30,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Info, BookOpen } from "lucide-react";
 
 const sheetSchema = z.object({
@@ -42,6 +42,9 @@ const sheetSchema = z.object({
   sourceUrlColumnIndex: z.coerce.number().min(0).default(0),
   ebayUrlColumnIndex: z.coerce.number().min(0).default(1),
   inventoryStatusColumnIndex: z.coerce.number().min(0).default(5),
+  trackedTargetUrlColumnIndex: z.coerce.number().min(0).default(14),
+  trackedTargetConditionColumnIndex: z.coerce.number().min(0).default(15),
+  trackedTargetPriceColumnIndex: z.coerce.number().min(0).default(16),
   ebayListingConditionColumnIndex: z.string().optional(),
   inventoryCheckerBaseUrl: z.string().optional(),
   inventoryCheckerApiKey: z.string().optional(),
@@ -71,6 +74,7 @@ export function Settings() {
   const testConnection = useTestSpreadsheetConnection();
   const syncPipeline = useSyncMonitorsFromSources();
   const remoteInventorySync = useTriggerRemoteInventorySync();
+  const [suggestingColumns, setSuggestingColumns] = useState(false);
 
   const sheetForm = useForm<SheetValues>({
     resolver: zodResolver(sheetSchema),
@@ -83,6 +87,9 @@ export function Settings() {
       sourceUrlColumnIndex: 0,
       ebayUrlColumnIndex: 1,
       inventoryStatusColumnIndex: 5,
+      trackedTargetUrlColumnIndex: 14,
+      trackedTargetConditionColumnIndex: 15,
+      trackedTargetPriceColumnIndex: 16,
       ebayListingConditionColumnIndex: "",
       inventoryCheckerBaseUrl: "https://ebay-lowest-checker-1.onrender.com",
       inventoryCheckerApiKey: "",
@@ -105,12 +112,17 @@ export function Settings() {
       "sourceUrlColumnIndex",
       "ebayUrlColumnIndex",
       "inventoryStatusColumnIndex",
+      "trackedTargetUrlColumnIndex",
+      "trackedTargetConditionColumnIndex",
+      "trackedTargetPriceColumnIndex",
       "myPriceColumnIndex",
       "priceColumnIndex",
       "alertColumnIndex",
     ],
   });
-  const w = Array.isArray(watchedCols) ? watchedCols.map((x) => Number(x) || 0) : [0, 1, 5, 3, 6, 5];
+  const w = Array.isArray(watchedCols)
+    ? watchedCols.map((x) => Number(x) || 0)
+    : [0, 1, 5, 14, 15, 16, 3, 6, 5];
   const condColWatch = useWatch({
     control: sheetForm.control,
     name: "ebayListingConditionColumnIndex",
@@ -127,6 +139,9 @@ export function Settings() {
         sourceUrlColumnIndex: config.sourceUrlColumnIndex ?? 0,
         ebayUrlColumnIndex: config.ebayUrlColumnIndex ?? 1,
         inventoryStatusColumnIndex: config.inventoryStatusColumnIndex ?? 5,
+        trackedTargetUrlColumnIndex: config.trackedTargetUrlColumnIndex ?? 14,
+        trackedTargetConditionColumnIndex: config.trackedTargetConditionColumnIndex ?? 15,
+        trackedTargetPriceColumnIndex: config.trackedTargetPriceColumnIndex ?? 16,
         ebayListingConditionColumnIndex:
           config.ebayListingConditionColumnIndex != null
             ? String(config.ebayListingConditionColumnIndex)
@@ -222,6 +237,47 @@ export function Settings() {
     });
   };
 
+  const handleSuggestColumns = async () => {
+    setSuggestingColumns(true);
+    try {
+      const resp = await fetch("/api/spreadsheet/columns/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.message ?? "列の推定に失敗しました");
+
+      const applyIfNumber = (key: keyof SheetValues, value: unknown) => {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          sheetForm.setValue(key, value as any);
+        }
+      };
+      applyIfNumber("sourceUrlColumnIndex", data?.sourceUrlColumnIndex);
+      applyIfNumber("ebayUrlColumnIndex", data?.ebayUrlColumnIndex);
+      applyIfNumber("myPriceColumnIndex", data?.myPriceColumnIndex);
+      applyIfNumber("inventoryStatusColumnIndex", data?.inventoryStatusColumnIndex);
+      applyIfNumber("trackedTargetUrlColumnIndex", data?.trackedTargetUrlColumnIndex);
+      applyIfNumber("trackedTargetConditionColumnIndex", data?.trackedTargetConditionColumnIndex);
+      applyIfNumber("trackedTargetPriceColumnIndex", data?.trackedTargetPriceColumnIndex);
+      if (typeof data?.ebayListingConditionColumnIndex === "number") {
+        sheetForm.setValue("ebayListingConditionColumnIndex", String(data.ebayListingConditionColumnIndex));
+      }
+
+      toast({
+        title: "列番号を自動入力しました",
+        description: "1行目の見出しから推定しました。合っているかだけ確認して保存してください。",
+      });
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "列の自動推定に失敗",
+        description: err?.message ?? String(err),
+      });
+    } finally {
+      setSuggestingColumns(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -254,6 +310,9 @@ export function Settings() {
           下の項目は「シート連携・在庫同期・自動改定」を使うときに必要です。まずは<strong>左の「価格リサーチ」だけ使う</strong>場合、eBay の App ID を環境変数
           <code className="mx-1 rounded bg-muted px-1">EBAY_APP_ID</code>
           で渡すか、下のフォームに保存してください。
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">
+          eBay App ID はこのページ下部の「eBay App ID」欄、または Render 環境変数 `EBAY_APP_ID` でも設定できます。
         </p>
       </div>
 
@@ -416,6 +475,18 @@ export function Settings() {
                     <p className="col-span-full text-xs text-muted-foreground leading-relaxed">
                       「列」の数字は左から<strong>0=A列</strong>です。入力すると右の説明文が現在の対応を示します。
                     </p>
+                    <div className="col-span-full">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSuggestColumns}
+                        disabled={suggestingColumns}
+                      >
+                        {suggestingColumns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        シート1行目から列番号を自動入力
+                      </Button>
+                    </div>
                     <FormField
                       control={sheetForm.control}
                       name="sourceUrlColumnIndex"
@@ -560,7 +631,7 @@ export function Settings() {
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
-                          <FormDescription>{formatColumnHint(Number(w[3]))}</FormDescription>
+                          <FormDescription>{formatColumnHint(Number(w[6]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -576,7 +647,7 @@ export function Settings() {
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
-                          <FormDescription>{formatColumnHint(Number(w[4]))}</FormDescription>
+                          <FormDescription>{formatColumnHint(Number(w[7]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -588,6 +659,57 @@ export function Settings() {
                         <FormItem>
                           <FormLabel className="font-semibold text-xs text-foreground leading-tight">
                             アラートON/OFF やメモを書く列
+                          </FormLabel>
+                          <FormControl>
+                            <Input type="number" className="tabular-nums" {...field} />
+                          </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[8]))}</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                    <FormField
+                      control={sheetForm.control}
+                      name="trackedTargetUrlColumnIndex"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            追跡対象URL（表示先）
+                          </FormLabel>
+                          <FormControl>
+                            <Input type="number" className="tabular-nums" {...field} />
+                          </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[3]))}</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={sheetForm.control}
+                      name="trackedTargetConditionColumnIndex"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            追跡対象コンディション（表示先）
+                          </FormLabel>
+                          <FormControl>
+                            <Input type="number" className="tabular-nums" {...field} />
+                          </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[4]))}</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={sheetForm.control}
+                      name="trackedTargetPriceColumnIndex"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            追跡対象価格(USD)（表示先）
                           </FormLabel>
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />

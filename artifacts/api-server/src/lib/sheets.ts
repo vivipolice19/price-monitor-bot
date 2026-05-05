@@ -89,6 +89,9 @@ export async function ensureMonitoringHeaders(): Promise<void> {
     { col: config.alertStatusColumnIndex ?? 11, title: "アラート状態" },
     { col: config.repricedValueColumnIndex ?? 12, title: "自動改定価格" },
     { col: config.evidenceUrlsColumnIndex ?? 13, title: "リサーチ根拠URL" },
+    { col: config.trackedTargetUrlColumnIndex ?? 14, title: "追跡対象URL" },
+    { col: config.trackedTargetConditionColumnIndex ?? 15, title: "追跡対象コンディション" },
+    { col: config.trackedTargetPriceColumnIndex ?? 16, title: "追跡対象価格(USD)" },
   ];
 
   await sheets.spreadsheets.values.batchUpdate({
@@ -150,6 +153,66 @@ export async function getRowPrice(rowNumber: number): Promise<{ found: boolean; 
     logger.error({ err, rowNumber, range }, "Failed to read row from spreadsheet");
     return { found: false };
   }
+}
+
+function normalizeHeader(v: string | undefined): string {
+  return String(v ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+export async function suggestSpreadsheetColumns(): Promise<{
+  sourceUrlColumnIndex?: number;
+  ebayUrlColumnIndex?: number;
+  myPriceColumnIndex?: number;
+  inventoryStatusColumnIndex?: number;
+  ebayListingConditionColumnIndex?: number;
+  trackedTargetUrlColumnIndex?: number;
+  trackedTargetConditionColumnIndex?: number;
+  trackedTargetPriceColumnIndex?: number;
+  detectedFromHeaders: string[];
+}> {
+  const result = await getSheets();
+  if (!result) {
+    return { detectedFromHeaders: [] };
+  }
+  const { sheets, config } = result;
+  if (!config.spreadsheetId || !config.sheetName) {
+    return { detectedFromHeaders: [] };
+  }
+
+  const resp = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.spreadsheetId,
+    range: `${config.sheetName}!A1:AZ1`,
+  });
+  const headers = (resp.data.values?.[0] ?? []).map((v) => String(v));
+  const normalized = headers.map(normalizeHeader);
+  const findBy = (patterns: RegExp[]): number | undefined => {
+    const idx = normalized.findIndex((h) => patterns.some((p) => p.test(h)));
+    return idx >= 0 ? idx : undefined;
+  };
+
+  const sourceUrlColumnIndex = findBy([/仕入/, /mercari/, /source/, /元url/, /参考url/]);
+  const ebayUrlColumnIndex = findBy([/ebayurl/, /ebay出品/, /itemurl/, /出品url/]);
+  const myPriceColumnIndex = findBy([/自分の売価/, /myprice/, /ebayprice/, /priceusd/, /売価/]);
+  const inventoryStatusColumnIndex = findBy([/在庫/, /status/, /ステータス/]);
+  const ebayListingConditionColumnIndex = findBy([/コンディション/, /condition/, /状態/]);
+  const trackedTargetUrlColumnIndex = findBy([/追跡対象url/, /targeturl/, /監視url/]);
+  const trackedTargetConditionColumnIndex = findBy([/追跡対象コンディション/, /targetcondition/, /監視コンディション/]);
+  const trackedTargetPriceColumnIndex = findBy([/追跡対象価格/, /targetprice/, /監視価格/]);
+
+  return {
+    sourceUrlColumnIndex,
+    ebayUrlColumnIndex,
+    myPriceColumnIndex,
+    inventoryStatusColumnIndex,
+    ebayListingConditionColumnIndex,
+    trackedTargetUrlColumnIndex,
+    trackedTargetConditionColumnIndex,
+    trackedTargetPriceColumnIndex,
+    detectedFromHeaders: headers,
+  };
 }
 
 function isSoldOutInventoryStatus(text: string | undefined): boolean {
@@ -439,6 +502,9 @@ export async function updateMonitorRowStatus(params: {
   alertStatus: string;
   repricedValue?: number;
   evidenceUrls?: string[];
+  trackedTargetUrl?: string;
+  trackedTargetCondition?: string;
+  trackedTargetPrice?: number;
 }): Promise<void> {
   const result = await getSheets();
   if (!result) return;
@@ -452,6 +518,9 @@ export async function updateMonitorRowStatus(params: {
   const alertStatusCol = columnIndexToLetter(config.alertStatusColumnIndex ?? 11);
   const repricedCol = columnIndexToLetter(config.repricedValueColumnIndex ?? 12);
   const evidenceCol = columnIndexToLetter(config.evidenceUrlsColumnIndex ?? 13);
+  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 14);
+  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 15);
+  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 16);
 
   const evidence = (params.evidenceUrls ?? []).slice(0, 5).join("\n");
 
@@ -466,6 +535,43 @@ export async function updateMonitorRowStatus(params: {
         { range: `${config.sheetName}!${alertStatusCol}${params.row}`, values: [[params.alertStatus]] },
         { range: `${config.sheetName}!${repricedCol}${params.row}`, values: [[params.repricedValue ?? ""]]},
         { range: `${config.sheetName}!${evidenceCol}${params.row}`, values: [[evidence]] },
+        { range: `${config.sheetName}!${trackedTargetUrlCol}${params.row}`, values: [[params.trackedTargetUrl ?? ""]] },
+        { range: `${config.sheetName}!${trackedTargetConditionCol}${params.row}`, values: [[params.trackedTargetCondition ?? ""]] },
+        { range: `${config.sheetName}!${trackedTargetPriceCol}${params.row}`, values: [[params.trackedTargetPrice ?? ""]] },
+      ],
+    },
+  });
+}
+
+export async function updateTrackedTargetCells(params: {
+  row: number;
+  trackedTargetUrl: string;
+  trackedTargetCondition?: string;
+  trackedTargetPrice?: number;
+}): Promise<void> {
+  const result = await getSheets();
+  if (!result) return;
+  const { sheets, config } = result;
+  if (!config.spreadsheetId || !config.sheetName) return;
+
+  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 14);
+  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 15);
+  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 16);
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: config.spreadsheetId,
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data: [
+        { range: `${config.sheetName}!${trackedTargetUrlCol}${params.row}`, values: [[params.trackedTargetUrl]] },
+        {
+          range: `${config.sheetName}!${trackedTargetConditionCol}${params.row}`,
+          values: [[params.trackedTargetCondition ?? ""]],
+        },
+        {
+          range: `${config.sheetName}!${trackedTargetPriceCol}${params.row}`,
+          values: [[params.trackedTargetPrice ?? ""]],
+        },
       ],
     },
   });

@@ -699,6 +699,15 @@ components:
           description: Defaults to inventory ebay_price_usd when omitted
         myCondition:
           type: string
+        trackedTargetCondition:
+          type: string
+          description: Candidate condition selected by user
+        trackedTargetPrice:
+          type: number
+          description: Candidate current total price selected by user
+        syncToSpreadsheetNow:
+          type: boolean
+          description: Write tracked target URL/condition/price to sheet immediately
         label:
           type: string
         spreadsheetRow:
@@ -715,6 +724,9 @@ components:
             updated:
               type: boolean
               description: True when an existing monitor for this inventory row was updated
+            spreadsheetSynced:
+              type: boolean
+              description: True when tracked target fields were written to sheet immediately
 
     CreateMonitorRequest:
       type: object
@@ -936,6 +948,12 @@ components:
           type: integer
         evidenceUrlsColumnIndex:
           type: integer
+        trackedTargetUrlColumnIndex:
+          type: integer
+        trackedTargetConditionColumnIndex:
+          type: integer
+        trackedTargetPriceColumnIndex:
+          type: integer
         autoRepriceEnabled:
           type: boolean
         undercutAmount:
@@ -998,6 +1016,12 @@ components:
         repricedValueColumnIndex:
           type: integer
         evidenceUrlsColumnIndex:
+          type: integer
+        trackedTargetUrlColumnIndex:
+          type: integer
+        trackedTargetConditionColumnIndex:
+          type: integer
+        trackedTargetPriceColumnIndex:
           type: integer
         autoRepriceEnabled:
           type: boolean

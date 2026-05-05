@@ -23,6 +23,9 @@ export interface SpreadsheetConfigRequest {
   alertStatusColumnIndex?: number;
   repricedValueColumnIndex?: number;
   evidenceUrlsColumnIndex?: number;
+  trackedTargetUrlColumnIndex?: number;
+  trackedTargetConditionColumnIndex?: number;
+  trackedTargetPriceColumnIndex?: number;
   autoRepriceEnabled?: boolean;
   undercutAmount?: number;
   minAllowedPrice?: number;

@@ -254,6 +254,20 @@ export const CreateMonitorFromInventoryBody = zod.object({
     .optional()
     .describe("Defaults to inventory ebay_price_usd when omitted"),
   myCondition: zod.string(),
+  trackedTargetCondition: zod
+    .string()
+    .optional()
+    .describe("Candidate condition selected by user"),
+  trackedTargetPrice: zod
+    .number()
+    .optional()
+    .describe("Candidate current total price selected by user"),
+  syncToSpreadsheetNow: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Write tracked target URL\/condition\/price to sheet immediately",
+    ),
   label: zod.string().optional(),
   spreadsheetRow: zod.number().optional(),
   checkIntervalMinutes: zod
@@ -285,6 +299,12 @@ export const CreateMonitorFromInventoryResponse = zod
         .optional()
         .describe(
           "True when an existing monitor for this inventory row was updated",
+        ),
+      spreadsheetSynced: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when tracked target fields were written to sheet immediately",
         ),
     }),
   );
@@ -482,6 +502,9 @@ export const GetSpreadsheetConfigResponse = zod.object({
   alertStatusColumnIndex: zod.number().optional(),
   repricedValueColumnIndex: zod.number().optional(),
   evidenceUrlsColumnIndex: zod.number().optional(),
+  trackedTargetUrlColumnIndex: zod.number().optional(),
+  trackedTargetConditionColumnIndex: zod.number().optional(),
+  trackedTargetPriceColumnIndex: zod.number().optional(),
   autoRepriceEnabled: zod.boolean().optional(),
   undercutAmount: zod.number().optional(),
   minAllowedPrice: zod.number().optional(),
@@ -532,6 +555,9 @@ export const SaveSpreadsheetConfigBody = zod.object({
   alertStatusColumnIndex: zod.number().optional(),
   repricedValueColumnIndex: zod.number().optional(),
   evidenceUrlsColumnIndex: zod.number().optional(),
+  trackedTargetUrlColumnIndex: zod.number().optional(),
+  trackedTargetConditionColumnIndex: zod.number().optional(),
+  trackedTargetPriceColumnIndex: zod.number().optional(),
   autoRepriceEnabled: zod.boolean().optional(),
   undercutAmount: zod.number().optional(),
   minAllowedPrice: zod.number().optional(),
@@ -565,6 +591,9 @@ export const SaveSpreadsheetConfigResponse = zod.object({
   alertStatusColumnIndex: zod.number().optional(),
   repricedValueColumnIndex: zod.number().optional(),
   evidenceUrlsColumnIndex: zod.number().optional(),
+  trackedTargetUrlColumnIndex: zod.number().optional(),
+  trackedTargetConditionColumnIndex: zod.number().optional(),
+  trackedTargetPriceColumnIndex: zod.number().optional(),
   autoRepriceEnabled: zod.boolean().optional(),
   undercutAmount: zod.number().optional(),
   minAllowedPrice: zod.number().optional(),

@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { monitorsTable, spreadsheetConfigTable } from "@workspace/db/schema";
 import { researchEbayItem } from "../lib/ebay";
 import { fetchInventoryCheckerProducts, type InventoryCheckerProduct } from "../lib/inventoryChecker";
+import { linkMonitorsToSpreadsheetRows, updateTrackedTargetCells } from "../lib/sheets";
 
 const router = Router();
 
@@ -133,6 +134,9 @@ router.post("/monitors", async (req, res) => {
     seedEbayUrl,
     myCondition,
     myPrice,
+    trackedTargetCondition,
+    trackedTargetPrice,
+    syncToSpreadsheetNow,
     label,
     spreadsheetRow,
     checkIntervalMinutes,
@@ -183,6 +187,17 @@ router.post("/monitors", async (req, res) => {
     }
 
     const existing = await db.select().from(monitorsTable).where(eq(monitorsTable.inventoryProductId, pid));
+    const effectiveTrackedCondition =
+      typeof trackedTargetCondition === "string" && trackedTargetCondition.trim()
+        ? trackedTargetCondition.trim()
+        : myCondition;
+    const parsedTrackedPrice =
+      trackedTargetPrice !== undefined && trackedTargetPrice !== null && trackedTargetPrice !== ""
+        ? Number(trackedTargetPrice)
+        : undefined;
+    const effectiveTrackedPrice = Number.isFinite(parsedTrackedPrice as number)
+      ? (parsedTrackedPrice as number)
+      : priceNum;
     if (existing.length > 0) {
       const [m] = existing;
       const [updated] = await db
@@ -198,6 +213,20 @@ router.post("/monitors", async (req, res) => {
         })
         .where(eq(monitorsTable.id, m.id))
         .returning();
+      let spreadsheetSynced = false;
+      if (syncToSpreadsheetNow !== false) {
+        await linkMonitorsToSpreadsheetRows();
+        const [fresh] = await db.select().from(monitorsTable).where(eq(monitorsTable.id, updated.id)).limit(1);
+        if (fresh?.spreadsheetRow) {
+          await updateTrackedTargetCells({
+            row: fresh.spreadsheetRow,
+            trackedTargetUrl: url,
+            trackedTargetCondition: effectiveTrackedCondition,
+            trackedTargetPrice: effectiveTrackedPrice,
+          });
+          spreadsheetSynced = true;
+        }
+      }
       return res.status(200).json({
         id: updated.id,
         ebayUrl: updated.ebayUrl,
@@ -214,6 +243,7 @@ router.post("/monitors", async (req, res) => {
         createdAt: updated.createdAt.toISOString(),
         hasAlert: false,
         updated: true,
+        spreadsheetSynced,
       });
     }
 
@@ -231,6 +261,21 @@ router.post("/monitors", async (req, res) => {
       })
       .returning();
 
+    let spreadsheetSynced = false;
+    if (syncToSpreadsheetNow !== false) {
+      await linkMonitorsToSpreadsheetRows();
+      const [fresh] = await db.select().from(monitorsTable).where(eq(monitorsTable.id, monitor.id)).limit(1);
+      if (fresh?.spreadsheetRow) {
+        await updateTrackedTargetCells({
+          row: fresh.spreadsheetRow,
+          trackedTargetUrl: url,
+          trackedTargetCondition: effectiveTrackedCondition,
+          trackedTargetPrice: effectiveTrackedPrice,
+        });
+        spreadsheetSynced = true;
+      }
+    }
+
     res.status(201).json({
       id: monitor.id,
       ebayUrl: monitor.ebayUrl,
@@ -247,6 +292,7 @@ router.post("/monitors", async (req, res) => {
       createdAt: monitor.createdAt.toISOString(),
       hasAlert: false,
       updated: false,
+      spreadsheetSynced,
     });
   } catch (err) {
     req.log.error({ err }, "inventoryCreateMonitor failed");

@@ -5,6 +5,7 @@ import {
   testSheetsConnection,
   syncAlertsToSpreadsheet,
   getRowPrice,
+  suggestSpreadsheetColumns,
   runMonitorSyncPipeline,
   syncMonitorsFromInventoryChecker,
 } from "../lib/sheets";
@@ -34,6 +35,9 @@ router.get("/spreadsheet/config", async (req, res) => {
         inventoryCheckerBaseUrl: "",
         hasInventoryCheckerApiKey: false,
         inventoryStatusColumnIndex: 5,
+        trackedTargetUrlColumnIndex: 14,
+        trackedTargetConditionColumnIndex: 15,
+        trackedTargetPriceColumnIndex: 16,
         ebayListingConditionColumnIndex: undefined,
         ebayOAuthRedirectUri: "",
       });
@@ -54,6 +58,9 @@ router.get("/spreadsheet/config", async (req, res) => {
       alertStatusColumnIndex: config.alertStatusColumnIndex,
       repricedValueColumnIndex: config.repricedValueColumnIndex,
       evidenceUrlsColumnIndex: config.evidenceUrlsColumnIndex,
+      trackedTargetUrlColumnIndex: config.trackedTargetUrlColumnIndex ?? 14,
+      trackedTargetConditionColumnIndex: config.trackedTargetConditionColumnIndex ?? 15,
+      trackedTargetPriceColumnIndex: config.trackedTargetPriceColumnIndex ?? 16,
       autoRepriceEnabled: config.autoRepriceEnabled,
       undercutAmount: config.undercutAmount ? parseFloat(String(config.undercutAmount)) : 0.01,
       minAllowedPrice: config.minAllowedPrice ? parseFloat(String(config.minAllowedPrice)) : undefined,
@@ -81,6 +88,9 @@ router.get("/spreadsheet/config", async (req, res) => {
         inventoryCheckerBaseUrl: "",
         hasInventoryCheckerApiKey: false,
         inventoryStatusColumnIndex: 5,
+        trackedTargetUrlColumnIndex: 14,
+        trackedTargetConditionColumnIndex: 15,
+        trackedTargetPriceColumnIndex: 16,
         ebayListingConditionColumnIndex: undefined,
         ebayOAuthRedirectUri: "",
         databaseNeedsMigration: true,
@@ -109,6 +119,9 @@ router.post("/spreadsheet/config", async (req, res) => {
     alertStatusColumnIndex,
     repricedValueColumnIndex,
     evidenceUrlsColumnIndex,
+    trackedTargetUrlColumnIndex,
+    trackedTargetConditionColumnIndex,
+    trackedTargetPriceColumnIndex,
     autoRepriceEnabled,
     undercutAmount,
     minAllowedPrice,
@@ -148,6 +161,9 @@ router.post("/spreadsheet/config", async (req, res) => {
       alertStatusColumnIndex: alertStatusColumnIndex ?? 11,
       repricedValueColumnIndex: repricedValueColumnIndex ?? 12,
       evidenceUrlsColumnIndex: evidenceUrlsColumnIndex ?? 13,
+      trackedTargetUrlColumnIndex: trackedTargetUrlColumnIndex ?? 14,
+      trackedTargetConditionColumnIndex: trackedTargetConditionColumnIndex ?? 15,
+      trackedTargetPriceColumnIndex: trackedTargetPriceColumnIndex ?? 16,
       autoRepriceEnabled: autoRepriceEnabled ?? false,
       undercutAmount: String(undercutAmount ?? 0.01),
       minAllowedPrice: minAllowedPrice !== undefined ? String(minAllowedPrice) : null,
@@ -204,6 +220,9 @@ router.post("/spreadsheet/config", async (req, res) => {
       alertStatusColumnIndex: saved.alertStatusColumnIndex,
       repricedValueColumnIndex: saved.repricedValueColumnIndex,
       evidenceUrlsColumnIndex: saved.evidenceUrlsColumnIndex,
+      trackedTargetUrlColumnIndex: saved.trackedTargetUrlColumnIndex ?? 14,
+      trackedTargetConditionColumnIndex: saved.trackedTargetConditionColumnIndex ?? 15,
+      trackedTargetPriceColumnIndex: saved.trackedTargetPriceColumnIndex ?? 16,
       autoRepriceEnabled: saved.autoRepriceEnabled,
       undercutAmount: saved.undercutAmount ? parseFloat(String(saved.undercutAmount)) : 0.01,
       minAllowedPrice: saved.minAllowedPrice ? parseFloat(String(saved.minAllowedPrice)) : undefined,
@@ -275,6 +294,16 @@ router.post("/spreadsheet/test", async (req, res) => {
   } catch (err: any) {
     req.log.error({ err }, "testSpreadsheetConnection failed");
     res.json({ success: false, message: err.message });
+  }
+});
+
+router.post("/spreadsheet/columns/suggest", async (req, res) => {
+  try {
+    const result = await suggestSpreadsheetColumns();
+    res.json(result);
+  } catch (err: any) {
+    req.log.error({ err }, "suggestSpreadsheetColumns failed");
+    res.status(500).json({ error: "suggest_failed", message: err.message });
   }
 });
 
