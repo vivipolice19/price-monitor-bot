@@ -34,6 +34,29 @@ type TradingCreds = {
   userToken?: string | null;
 };
 
+function toEbayItemFromFinding(item: any): EbayItem {
+  const price =
+    parseFirstNumber(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__) ??
+    parseFirstNumber(item.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.__value__) ??
+    0;
+  const shipping = parseFirstNumber(item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__) ?? 0;
+  const itemUrl = item.viewItemURL?.[0] || "";
+  return {
+    itemId: item.itemId?.[0] || extractItemIdFromUrl(itemUrl) || "",
+    title: item.title?.[0] || "",
+    price,
+    currency: item.sellingStatus?.[0]?.currentPrice?.[0]?.["@currencyId"] || "USD",
+    condition: item.condition?.[0]?.conditionDisplayName?.[0] || "Unknown",
+    conditionId: item.condition?.[0]?.conditionId?.[0],
+    seller: item.sellerInfo?.[0]?.sellerUserName?.[0],
+    url: itemUrl,
+    shippingCost: shipping,
+    totalPrice: price + shipping,
+    imageUrl: item.galleryURL?.[0],
+    location: item.location?.[0],
+  };
+}
+
 export function extractItemIdFromUrl(url: string): string | null {
   const patterns = [
     /\/itm\/(?:[^/]+\/)?(\d+)/,
@@ -247,6 +270,36 @@ async function fetchEbayItemByTradingApi(itemId: string, creds: TradingCreds): P
   }
 }
 
+async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Promise<EbayItem | null> {
+  try {
+    const resp = await axios.get("https://svcs.ebay.com/services/search/FindingService/v1", {
+      params: {
+        "OPERATION-NAME": "findItemsAdvanced",
+        "SERVICE-VERSION": "1.0.0",
+        "SECURITY-APPNAME": appId,
+        "RESPONSE-DATA-FORMAT": "JSON",
+        keywords: itemId,
+        "paginationInput.entriesPerPage": "25",
+        sortOrder: "BestMatch",
+      },
+      timeout: 10000,
+    });
+    const items = resp.data?.findItemsAdvancedResponse?.[0]?.searchResult?.[0]?.item || [];
+    if (!Array.isArray(items) || items.length === 0) return null;
+    const picked =
+      items.find((it: any) => {
+        const url = String(it?.viewItemURL?.[0] ?? "");
+        const id = extractItemIdFromUrl(url) ?? String(it?.itemId?.[0] ?? "");
+        return id === itemId;
+      }) ?? items[0];
+    const parsed = toEbayItemFromFinding(picked);
+    return parsed.itemId ? parsed : null;
+  } catch (err) {
+    logger.warn({ err, itemId }, "eBay Finding by itemId failed");
+    return null;
+  }
+}
+
 async function scrapeEbayItem(url: string): Promise<EbayItem | null> {
   try {
     const resp = await axios.get(url, {
@@ -419,7 +472,9 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
   }
 
   try {
-    const keywords = originalItem.title.split(" ").slice(0, 6).join(" ");
+    const titleKeywords = originalItem.title.split(" ").slice(0, 6).join(" ").trim();
+    const keywords = titleKeywords || originalItem.itemId || "";
+    if (!keywords) return [];
 
     const resp = await axios.get("https://svcs.ebay.com/services/search/FindingService/v1", {
       params: {
@@ -446,27 +501,7 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
     const searchResult = resp.data?.findItemsAdvancedResponse?.[0];
     const items = searchResult?.searchResult?.[0]?.item || [];
 
-    return items.map((item: any): EbayItem => {
-      const price =
-        parseFirstNumber(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__) ??
-        parseFirstNumber(item.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.__value__) ??
-        0;
-      const shipping = parseFirstNumber(item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__) ?? 0;
-      return {
-        itemId: item.itemId?.[0] || "",
-        title: item.title?.[0] || "",
-        price,
-        currency: item.sellingStatus?.[0]?.currentPrice?.[0]?.["@currencyId"] || "USD",
-        condition: item.condition?.[0]?.conditionDisplayName?.[0] || "Unknown",
-        conditionId: item.condition?.[0]?.conditionId?.[0],
-        seller: item.sellerInfo?.[0]?.sellerUserName?.[0],
-        url: item.viewItemURL?.[0] || "",
-        shippingCost: shipping,
-        totalPrice: price + shipping,
-        imageUrl: item.galleryURL?.[0],
-        location: item.location?.[0],
-      };
-    });
+    return items.map((item: any): EbayItem => toEbayItemFromFinding(item));
   } catch (err) {
     logger.warn({ err }, "eBay Finding API failed, falling back to scrape search");
     return searchItemsByTitleScrape(originalItem);
@@ -590,6 +625,8 @@ export async function fetchListingCondition(ebayUrl: string, appId?: string | nu
   if (itemId && resolved) {
     const item = await fetchEbayItemByApi(itemId, resolved);
     if (item?.condition) return item.condition;
+    const viaFinding = await fetchEbayItemByFindingItemId(itemId, resolved);
+    if (viaFinding?.condition) return viaFinding.condition;
   }
   const scraped = await scrapeEbayItem(ebayUrl);
   return scraped?.condition ?? "Unknown";
@@ -620,6 +657,10 @@ export async function researchEbayItem(
       certId: options?.certId,
       userToken: options?.userToken,
     });
+  }
+
+  if (!originalItem && itemId && appId) {
+    originalItem = await fetchEbayItemByFindingItemId(itemId, appId);
   }
 
   if (!originalItem) {
