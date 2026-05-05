@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Vite build output for static UI (generated before api-server build on CI)
+artifacts/api-server/public
