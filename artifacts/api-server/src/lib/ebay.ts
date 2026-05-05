@@ -284,7 +284,20 @@ async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Prom
       },
       timeout: 10000,
     });
-    const items = resp.data?.findItemsAdvancedResponse?.[0]?.searchResult?.[0]?.item || [];
+    const top = resp.data?.findItemsAdvancedResponse?.[0];
+    const ack = String(top?.ack?.[0] ?? "").toLowerCase();
+    if (ack && ack !== "success" && ack !== "warning") {
+      logger.warn(
+        {
+          itemId,
+          ack,
+          error: top?.errorMessage?.[0]?.error?.[0]?.message?.[0],
+        },
+        "eBay Finding API returned failure for itemId lookup",
+      );
+      return null;
+    }
+    const items = top?.searchResult?.[0]?.item || [];
     if (!Array.isArray(items) || items.length === 0) return null;
     const picked =
       items.find((it: any) => {
@@ -468,7 +481,7 @@ function isSameItemStrict(original: EbayItem, candidate: EbayItem): boolean {
 
 async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefined): Promise<EbayItem[]> {
   if (!appId) {
-    return searchItemsByTitleScrape(originalItem);
+    return [];
   }
 
   try {
@@ -499,12 +512,24 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
     });
 
     const searchResult = resp.data?.findItemsAdvancedResponse?.[0];
+    const ack = String(searchResult?.ack?.[0] ?? "").toLowerCase();
+    if (ack && ack !== "success" && ack !== "warning") {
+      logger.warn(
+        {
+          ack,
+          error: searchResult?.errorMessage?.[0]?.error?.[0]?.message?.[0],
+          keywords,
+        },
+        "eBay Finding API returned failure for title search",
+      );
+      return [];
+    }
     const items = searchResult?.searchResult?.[0]?.item || [];
 
     return items.map((item: any): EbayItem => toEbayItemFromFinding(item));
   } catch (err) {
-    logger.warn({ err }, "eBay Finding API failed, falling back to scrape search");
-    return searchItemsByTitleScrape(originalItem);
+    logger.warn({ err }, "eBay Finding API failed");
+    return [];
   }
 }
 
@@ -663,12 +688,13 @@ export async function researchEbayItem(
     originalItem = await fetchEbayItemByFindingItemId(itemId, appId);
   }
 
-  if (!originalItem) {
+  if (!originalItem && !appId) {
+    // No API credentials at all: last resort only.
     originalItem = await scrapeEbayItem(url);
   }
 
   if (!originalItem) {
-    throw new Error("商品情報を取得できませんでした。URLを確認してください。");
+    throw new Error("eBay APIから商品情報を取得できませんでした。EBAY_APP_ID（必要ならDEV/CERT/USER_TOKEN）を確認してください。");
   }
 
   // If listing detail fetch succeeded but price is missing/0, try Finding API hint.
@@ -679,6 +705,9 @@ export async function researchEbayItem(
       originalItem.totalPrice = hinted;
       originalItem.shippingCost = 0;
     }
+  }
+  if ((originalItem.totalPrice ?? 0) <= 0) {
+    throw new Error("商品価格を取得できませんでした（eBay側の取得制限またはAPI応答不足）。");
   }
 
   const foundItems = await searchItemsByTitle(originalItem, appId);
