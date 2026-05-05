@@ -20,14 +20,19 @@ import type {
   Alert,
   CheckResult,
   ConnectionTestResult,
+  CreateMonitorFromInventoryRequest,
   CreateMonitorRequest,
   EbayOAuthAuthorizeResponse,
   EbayOAuthCallbackParams,
   ErrorResponse,
   HealthStatus,
+  InventoryProductsListResponse,
+  InventoryResearchRequest,
+  InventoryResearchResponse,
   InventorySyncResult,
   Monitor,
   MonitorDetail,
+  MonitorFromInventoryResponse,
   PriceHistory,
   RemoteInventorySyncResult,
   ResearchRequest,
@@ -208,6 +213,264 @@ export const useResearchPrice = <
   TContext
 > => {
   return useMutation(getResearchPriceMutationOptions(options));
+};
+
+/**
+ * @summary Products from linked inventory service with monitor status
+ */
+export const getListInventoryProductsUrl = () => {
+  return `/api/inventory/products`;
+};
+
+export const listInventoryProducts = async (
+  options?: RequestInit,
+): Promise<InventoryProductsListResponse> => {
+  return customFetch<InventoryProductsListResponse>(
+    getListInventoryProductsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListInventoryProductsQueryKey = () => {
+  return [`/api/inventory/products`] as const;
+};
+
+export const getListInventoryProductsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listInventoryProducts>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInventoryProducts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListInventoryProductsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listInventoryProducts>>
+  > = ({ signal }) => listInventoryProducts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listInventoryProducts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListInventoryProductsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listInventoryProducts>>
+>;
+export type ListInventoryProductsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Products from linked inventory service with monitor status
+ */
+
+export function useListInventoryProducts<
+  TData = Awaited<ReturnType<typeof listInventoryProducts>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInventoryProducts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListInventoryProductsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Run same-item research for one inventory product listing URL
+ */
+export const getInventoryResearchProductUrl = () => {
+  return `/api/inventory/research`;
+};
+
+export const inventoryResearchProduct = async (
+  inventoryResearchRequest: InventoryResearchRequest,
+  options?: RequestInit,
+): Promise<InventoryResearchResponse> => {
+  return customFetch<InventoryResearchResponse>(
+    getInventoryResearchProductUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(inventoryResearchRequest),
+    },
+  );
+};
+
+export const getInventoryResearchProductMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inventoryResearchProduct>>,
+    TError,
+    { data: BodyType<InventoryResearchRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof inventoryResearchProduct>>,
+  TError,
+  { data: BodyType<InventoryResearchRequest> },
+  TContext
+> => {
+  const mutationKey = ["inventoryResearchProduct"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof inventoryResearchProduct>>,
+    { data: BodyType<InventoryResearchRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return inventoryResearchProduct(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type InventoryResearchProductMutationResult = NonNullable<
+  Awaited<ReturnType<typeof inventoryResearchProduct>>
+>;
+export type InventoryResearchProductMutationBody =
+  BodyType<InventoryResearchRequest>;
+export type InventoryResearchProductMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Run same-item research for one inventory product listing URL
+ */
+export const useInventoryResearchProduct = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inventoryResearchProduct>>,
+    TError,
+    { data: BodyType<InventoryResearchRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof inventoryResearchProduct>>,
+  TError,
+  { data: BodyType<InventoryResearchRequest> },
+  TContext
+> => {
+  return useMutation(getInventoryResearchProductMutationOptions(options));
+};
+
+/**
+ * @summary Create or update a monitor from inventory row
+ */
+export const getCreateMonitorFromInventoryUrl = () => {
+  return `/api/inventory/monitors`;
+};
+
+export const createMonitorFromInventory = async (
+  createMonitorFromInventoryRequest: CreateMonitorFromInventoryRequest,
+  options?: RequestInit,
+): Promise<MonitorFromInventoryResponse> => {
+  return customFetch<MonitorFromInventoryResponse>(
+    getCreateMonitorFromInventoryUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createMonitorFromInventoryRequest),
+    },
+  );
+};
+
+export const getCreateMonitorFromInventoryMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMonitorFromInventory>>,
+    TError,
+    { data: BodyType<CreateMonitorFromInventoryRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createMonitorFromInventory>>,
+  TError,
+  { data: BodyType<CreateMonitorFromInventoryRequest> },
+  TContext
+> => {
+  const mutationKey = ["createMonitorFromInventory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createMonitorFromInventory>>,
+    { data: BodyType<CreateMonitorFromInventoryRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createMonitorFromInventory(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateMonitorFromInventoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createMonitorFromInventory>>
+>;
+export type CreateMonitorFromInventoryMutationBody =
+  BodyType<CreateMonitorFromInventoryRequest>;
+export type CreateMonitorFromInventoryMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create or update a monitor from inventory row
+ */
+export const useCreateMonitorFromInventory = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMonitorFromInventory>>,
+    TError,
+    { data: BodyType<CreateMonitorFromInventoryRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createMonitorFromInventory>>,
+  TError,
+  { data: BodyType<CreateMonitorFromInventoryRequest> },
+  TContext
+> => {
+  return useMutation(getCreateMonitorFromInventoryMutationOptions(options));
 };
 
 /**

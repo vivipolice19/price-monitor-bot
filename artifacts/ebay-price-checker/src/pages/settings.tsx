@@ -291,6 +291,10 @@ export function Settings() {
               ：トップで eBay URL を入れて「分析する」。シートは不要です。
             </p>
             <p>
+              <strong className="text-foreground">在庫連携から一気に</strong>
+              ：左メニュー「在庫から監視」で管理アプリの一覧 → 自動リサーチ → 候補URL選択 → 監視登録ができます。
+            </p>
+            <p>
               <strong className="text-foreground">2. 監視・シート書き込み</strong>
               ：Google のサービスアカウント JSON とスプレッドシート ID をここで保存し、「接続テスト」で確認します。
             </p>

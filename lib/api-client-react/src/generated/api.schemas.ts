@@ -56,6 +56,69 @@ export interface ResearchResult {
   searchedAt: string;
 }
 
+export interface InventoryResearchRequest {
+  inventoryProductId: number;
+}
+
+export interface InventoryProductSnapshot {
+  id?: number;
+  mercari_url?: string;
+  ebay_url?: string;
+  ebay_price_usd?: number;
+  status?: string;
+}
+
+export type InventoryProductRow = InventoryProductSnapshot & {
+  purchase_price?: number;
+  alert_status?: string | null;
+  last_check?: string | null;
+  /** Existing monitor id if already tracked */
+  monitorId?: number | null;
+};
+
+export interface InventoryProductsListResponse {
+  count: number;
+  products: InventoryProductRow[];
+}
+
+export type InventoryResearchResponse = ResearchResult & {
+  inventoryProduct: InventoryProductSnapshot;
+};
+
+export interface CreateMonitorFromInventoryRequest {
+  inventoryProductId: number;
+  /** Optional. Pick a listing URL from research candidates; defaults to inventory ebay_url */
+  seedEbayUrl?: string;
+  /** Defaults to inventory ebay_price_usd when omitted */
+  myPrice?: number;
+  myCondition: string;
+  label?: string;
+  spreadsheetRow?: number;
+  checkIntervalMinutes?: number;
+}
+
+export interface Monitor {
+  id: number;
+  ebayUrl: string;
+  myPrice: number;
+  myCondition: string;
+  label?: string;
+  spreadsheetRow?: number;
+  inventoryProductId?: number;
+  checkIntervalMinutes?: number;
+  isActive: boolean;
+  currentLowestPrice?: number;
+  currentLowestCondition?: string;
+  lastCheckedAt?: string;
+  createdAt: string;
+  hasAlert: boolean;
+}
+
+export type MonitorFromInventoryResponse = Monitor & {
+  /** True when an existing monitor for this inventory row was updated */
+  updated?: boolean;
+};
+
 export interface CreateMonitorRequest {
   ebayUrl: string;
   myPrice: number;
@@ -75,23 +138,6 @@ export interface UpdateMonitorRequest {
   inventoryProductId?: number | null;
   checkIntervalMinutes?: number;
   isActive?: boolean;
-}
-
-export interface Monitor {
-  id: number;
-  ebayUrl: string;
-  myPrice: number;
-  myCondition: string;
-  label?: string;
-  spreadsheetRow?: number;
-  inventoryProductId?: number;
-  checkIntervalMinutes?: number;
-  isActive: boolean;
-  currentLowestPrice?: number;
-  currentLowestCondition?: string;
-  lastCheckedAt?: string;
-  createdAt: string;
-  hasAlert: boolean;
 }
 
 export interface PriceHistory {

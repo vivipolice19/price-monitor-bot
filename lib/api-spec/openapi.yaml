@@ -18,6 +18,8 @@ tags:
     description: Google Sheets integration
   - name: ebay
     description: eBay OAuth and listing operations
+  - name: inventory
+    description: Inventory / listing app integration
 paths:
   /healthz:
     get:
@@ -52,6 +54,111 @@ paths:
                 $ref: "#/components/schemas/ResearchResult"
         "400":
           description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inventory/products:
+    get:
+      operationId: listInventoryProducts
+      tags: [inventory]
+      summary: Products from linked inventory service with monitor status
+      responses:
+        "200":
+          description: Inventory product list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryProductsListResponse"
+        "400":
+          description: Inventory URL not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inventory/research:
+    post:
+      operationId: inventoryResearchProduct
+      tags: [inventory]
+      summary: Run same-item research for one inventory product listing URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryResearchRequest"
+      responses:
+        "200":
+          description: Research results plus inventory snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryResearchResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inventory/monitors:
+    post:
+      operationId: createMonitorFromInventory
+      tags: [inventory]
+      summary: Create or update a monitor from inventory row
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMonitorFromInventoryRequest"
+      responses:
+        "200":
+          description: Monitor updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitorFromInventoryResponse"
+        "201":
+          description: Monitor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitorFromInventoryResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Product not found
           content:
             application/json:
               schema:
@@ -518,6 +625,96 @@ components:
         - allItems
         - evidenceUrls
         - searchedAt
+
+    InventoryResearchRequest:
+      type: object
+      required: [inventoryProductId]
+      properties:
+        inventoryProductId:
+          type: integer
+
+    InventoryProductSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        mercari_url:
+          type: string
+        ebay_url:
+          type: string
+        ebay_price_usd:
+          type: number
+        status:
+          type: string
+
+    InventoryProductRow:
+      allOf:
+        - $ref: "#/components/schemas/InventoryProductSnapshot"
+        - type: object
+          properties:
+            purchase_price:
+              type: number
+            alert_status:
+              type: string
+              nullable: true
+            last_check:
+              type: string
+              nullable: true
+            monitorId:
+              type: integer
+              nullable: true
+              description: Existing monitor id if already tracked
+
+    InventoryProductsListResponse:
+      type: object
+      required: [count, products]
+      properties:
+        count:
+          type: integer
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/InventoryProductRow"
+
+    InventoryResearchResponse:
+      allOf:
+        - $ref: "#/components/schemas/ResearchResult"
+        - type: object
+          required: [inventoryProduct]
+          properties:
+            inventoryProduct:
+              $ref: "#/components/schemas/InventoryProductSnapshot"
+
+    CreateMonitorFromInventoryRequest:
+      type: object
+      required: [inventoryProductId, myCondition]
+      properties:
+        inventoryProductId:
+          type: integer
+        seedEbayUrl:
+          type: string
+          description: Optional. Pick a listing URL from research candidates; defaults to inventory ebay_url
+        myPrice:
+          type: number
+          description: Defaults to inventory ebay_price_usd when omitted
+        myCondition:
+          type: string
+        label:
+          type: string
+        spreadsheetRow:
+          type: integer
+        checkIntervalMinutes:
+          type: integer
+          default: 360
+
+    MonitorFromInventoryResponse:
+      allOf:
+        - $ref: "#/components/schemas/Monitor"
+        - type: object
+          properties:
+            updated:
+              type: boolean
+              description: True when an existing monitor for this inventory row was updated
 
     CreateMonitorRequest:
       type: object

@@ -5,6 +5,7 @@ import monitorsRouter from "./monitors";
 import alertsRouter from "./alerts";
 import spreadsheetRouter from "./spreadsheet";
 import ebayOAuthRouter from "./ebayOAuth";
+import inventoryRouter from "./inventory";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(monitorsRouter);
 router.use(alertsRouter);
 router.use(spreadsheetRouter);
 router.use(ebayOAuthRouter);
+router.use("/inventory", inventoryRouter);
 
 export default router;

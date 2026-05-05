@@ -108,6 +108,188 @@ export const ResearchPriceResponse = zod.object({
 });
 
 /**
+ * @summary Products from linked inventory service with monitor status
+ */
+export const ListInventoryProductsResponse = zod.object({
+  count: zod.number(),
+  products: zod.array(
+    zod
+      .object({
+        id: zod.number().optional(),
+        mercari_url: zod.string().optional(),
+        ebay_url: zod.string().optional(),
+        ebay_price_usd: zod.number().optional(),
+        status: zod.string().optional(),
+      })
+      .and(
+        zod.object({
+          purchase_price: zod.number().optional(),
+          alert_status: zod.string().nullish(),
+          last_check: zod.string().nullish(),
+          monitorId: zod
+            .number()
+            .nullish()
+            .describe("Existing monitor id if already tracked"),
+        }),
+      ),
+  ),
+});
+
+/**
+ * @summary Run same-item research for one inventory product listing URL
+ */
+export const InventoryResearchProductBody = zod.object({
+  inventoryProductId: zod.number(),
+});
+
+export const InventoryResearchProductResponse = zod
+  .object({
+    originalItem: zod.object({
+      itemId: zod.string(),
+      title: zod.string(),
+      price: zod.number(),
+      currency: zod.string(),
+      condition: zod.string(),
+      conditionId: zod.string().optional(),
+      seller: zod.string().optional(),
+      url: zod.string(),
+      shippingCost: zod.number().optional(),
+      totalPrice: zod.number(),
+      imageUrl: zod.string().optional(),
+      location: zod.string().optional(),
+      identifiers: zod
+        .object({
+          upc: zod.array(zod.string()).optional(),
+          ean: zod.array(zod.string()).optional(),
+          isbn: zod.array(zod.string()).optional(),
+          mpn: zod.string().optional(),
+          brand: zod.string().optional(),
+          epid: zod.string().optional(),
+        })
+        .optional(),
+    }),
+    lowestByCondition: zod.record(
+      zod.string(),
+      zod.object({
+        itemId: zod.string(),
+        title: zod.string(),
+        price: zod.number(),
+        currency: zod.string(),
+        condition: zod.string(),
+        conditionId: zod.string().optional(),
+        seller: zod.string().optional(),
+        url: zod.string(),
+        shippingCost: zod.number().optional(),
+        totalPrice: zod.number(),
+        imageUrl: zod.string().optional(),
+        location: zod.string().optional(),
+        identifiers: zod
+          .object({
+            upc: zod.array(zod.string()).optional(),
+            ean: zod.array(zod.string()).optional(),
+            isbn: zod.array(zod.string()).optional(),
+            mpn: zod.string().optional(),
+            brand: zod.string().optional(),
+            epid: zod.string().optional(),
+          })
+          .optional(),
+      }),
+    ),
+    allItems: zod.array(
+      zod.object({
+        itemId: zod.string(),
+        title: zod.string(),
+        price: zod.number(),
+        currency: zod.string(),
+        condition: zod.string(),
+        conditionId: zod.string().optional(),
+        seller: zod.string().optional(),
+        url: zod.string(),
+        shippingCost: zod.number().optional(),
+        totalPrice: zod.number(),
+        imageUrl: zod.string().optional(),
+        location: zod.string().optional(),
+        identifiers: zod
+          .object({
+            upc: zod.array(zod.string()).optional(),
+            ean: zod.array(zod.string()).optional(),
+            isbn: zod.array(zod.string()).optional(),
+            mpn: zod.string().optional(),
+            brand: zod.string().optional(),
+            epid: zod.string().optional(),
+          })
+          .optional(),
+      }),
+    ),
+    evidenceUrls: zod.array(zod.string()),
+    searchedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      inventoryProduct: zod.object({
+        id: zod.number().optional(),
+        mercari_url: zod.string().optional(),
+        ebay_url: zod.string().optional(),
+        ebay_price_usd: zod.number().optional(),
+        status: zod.string().optional(),
+      }),
+    }),
+  );
+
+/**
+ * @summary Create or update a monitor from inventory row
+ */
+export const createMonitorFromInventoryBodyCheckIntervalMinutesDefault = 360;
+
+export const CreateMonitorFromInventoryBody = zod.object({
+  inventoryProductId: zod.number(),
+  seedEbayUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional. Pick a listing URL from research candidates; defaults to inventory ebay_url",
+    ),
+  myPrice: zod
+    .number()
+    .optional()
+    .describe("Defaults to inventory ebay_price_usd when omitted"),
+  myCondition: zod.string(),
+  label: zod.string().optional(),
+  spreadsheetRow: zod.number().optional(),
+  checkIntervalMinutes: zod
+    .number()
+    .default(createMonitorFromInventoryBodyCheckIntervalMinutesDefault),
+});
+
+export const CreateMonitorFromInventoryResponse = zod
+  .object({
+    id: zod.number(),
+    ebayUrl: zod.string(),
+    myPrice: zod.number(),
+    myCondition: zod.string(),
+    label: zod.string().optional(),
+    spreadsheetRow: zod.number().optional(),
+    inventoryProductId: zod.number().optional(),
+    checkIntervalMinutes: zod.number().optional(),
+    isActive: zod.boolean(),
+    currentLowestPrice: zod.number().optional(),
+    currentLowestCondition: zod.string().optional(),
+    lastCheckedAt: zod.coerce.date().optional(),
+    createdAt: zod.coerce.date(),
+    hasAlert: zod.boolean(),
+  })
+  .and(
+    zod.object({
+      updated: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when an existing monitor for this inventory row was updated",
+        ),
+    }),
+  );
+
+/**
  * @summary List all price monitors
  */
 export const ListMonitorsResponseItem = zod.object({
