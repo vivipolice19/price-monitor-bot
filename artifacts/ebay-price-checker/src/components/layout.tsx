@@ -56,21 +56,48 @@ export function Layout({ children }: LayoutProps) {
         
         <div className="p-4">
           <div className="px-3 py-2 bg-sidebar-accent rounded-md border border-sidebar-border">
-            <div className="text-[10px] font-bold text-sidebar-foreground/50 uppercase tracking-wider mb-1">Status</div>
+            <div className="text-[10px] font-bold text-sidebar-foreground/50 uppercase tracking-wider mb-1">状態</div>
             <div className="flex items-center text-xs text-sidebar-foreground">
               <div className="w-2 h-2 rounded-full bg-success mr-2 shadow-[0_0_8px_rgba(22,163,74,0.8)]"></div>
-              System Online
+              接続済み
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-slate-50/50">
-        <div className="h-full">
-          {children}
+      {/* Mobile: horizontal nav (sidebar is hidden on small screens) */}
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        <nav
+          className="md:hidden flex shrink-0 gap-1 overflow-x-auto border-b bg-sidebar px-2 py-2 text-sidebar-foreground"
+          aria-label="メインメニュー"
+        >
+          {navigation.map((item) => {
+            const isActive =
+              location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  "shrink-0 rounded-md px-3 py-2 text-xs font-medium whitespace-nowrap",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-sidebar-accent/50 text-sidebar-foreground/80",
+                )}
+              >
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950 md:px-4">
+          <strong className="font-semibold">初回・無料プラン:</strong>{" "}
+          1分ほど反応が遅いことがあります。手順は「設定」ページ上部の「使い方」を開いてください。
         </div>
-      </main>
+        <main className="flex-1 overflow-y-auto bg-slate-50/50">
+          <div className="h-full min-h-0">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

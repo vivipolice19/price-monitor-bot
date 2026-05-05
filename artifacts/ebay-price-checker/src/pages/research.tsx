@@ -21,6 +21,20 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+function formatResearchError(err: unknown): string {
+  const msg =
+    err && typeof err === "object" && "message" in err
+      ? String((err as Error).message)
+      : String(err ?? "");
+  if (/Failed query|spreadsheet_config|42P01|does not exist/i.test(msg)) {
+    return "データベースの準備ができていません。管理者向け: drizzle-kit push でテーブルを作成してください。";
+  }
+  if (/App ID|APP_ID|appId|api key/i.test(msg)) {
+    return "eBay の App ID が必要です。Render の環境変数 EBAY_APP_ID を設定するか、設定ページで eBay App ID を保存してください。";
+  }
+  return msg.trim() || "リサーチに失敗しました。URL とネット接続を確認してください。";
+}
+
 export function Research() {
   const [selectedItemForMonitor, setSelectedItemForMonitor] = useState<any>(null);
   const research = useResearchPrice();
@@ -66,39 +80,42 @@ export function Research() {
   const result = research.data;
 
   return (
-    <div className="p-8 max-w-[1400px] mx-auto space-y-8">
+    <div className="p-4 md:p-8 max-w-[1400px] mx-auto space-y-6 md:space-y-8">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Market Research</h1>
-        <p className="text-muted-foreground mt-2">Analyze competitor pricing and find undersell opportunities.</p>
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">価格リサーチ</h1>
+        <p className="text-muted-foreground mt-2 text-sm md:text-base leading-relaxed">
+          調べたい商品の <strong>eBay 出品 URL</strong> を入れて「分析する」を押すだけです。シート連携を使う場合だけ、行番号と自分の価格を入力します（任意）。
+        </p>
       </div>
 
       <Card className="border-0 shadow-sm ring-1 ring-border/50 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 md:p-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col md:flex-row items-end gap-5">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col md:flex-row items-stretch md:items-end gap-4 md:gap-5">
               <FormField
                 control={form.control}
                 name="url"
                 render={({ field }) => (
                   <FormItem className="flex-1 w-full">
-                    <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">eBay URL</FormLabel>
+                    <FormLabel className="font-semibold text-sm text-foreground">① eBay の商品 URL（必須）</FormLabel>
                     <FormControl>
                       <Input placeholder="https://www.ebay.com/itm/..." className="h-11 font-mono text-sm shadow-sm focus-visible:ring-primary/30" {...field} />
                     </FormControl>
+                    <p className="text-xs text-muted-foreground">ブラウザのアドレスバーからそのままコピーできます。</p>
                     <FormMessage />
                   </FormItem>
                 )}
               />
               
-              <div className="flex gap-4 w-full md:w-auto">
+              <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
                 <FormField
                   control={form.control}
                   name="row"
                   render={({ field }) => (
-                    <FormItem className="w-24">
-                      <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Sheet Row</FormLabel>
+                    <FormItem className="w-full sm:w-28">
+                      <FormLabel className="font-semibold text-sm text-foreground">② シート行（任意）</FormLabel>
                       <FormControl>
-                        <Input placeholder="Row #" className="h-11 tabular-nums focus-visible:ring-primary/30 shadow-sm" {...field} />
+                        <Input placeholder="例: 5" className="h-11 tabular-nums focus-visible:ring-primary/30 shadow-sm" inputMode="numeric" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -109,8 +126,8 @@ export function Research() {
                   control={form.control}
                   name="myPrice"
                   render={({ field }) => (
-                    <FormItem className="w-36">
-                      <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">My Price ($)</FormLabel>
+                    <FormItem className="w-full sm:w-44">
+                      <FormLabel className="font-semibold text-sm text-foreground">③ 自分の価格 USD（任意）</FormLabel>
                       <FormControl>
                         <div className="relative flex">
                           <Input type="number" step="0.01" placeholder="0.00" className="h-11 pl-6 font-mono tabular-nums shadow-sm focus-visible:ring-primary/30 rounded-r-none" {...field} />
@@ -121,9 +138,9 @@ export function Research() {
                             onClick={handleFetchPrice} 
                             disabled={!rowValue || isFetchingRow}
                             className="h-11 rounded-l-none border-l-0 px-3 bg-muted hover:bg-muted/80 text-muted-foreground"
-                            title="Fetch price from row"
+                            title="シートの行から価格を読み込む"
                           >
-                            {isFetchingRow ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
+                            {isFetchingRow ? <Loader2 className="h-4 w-4 animate-spin" /> : "取得"}
                           </Button>
                         </div>
                       </FormControl>
@@ -133,11 +150,11 @@ export function Research() {
                 />
               </div>
 
-              <Button type="submit" disabled={research.isPending} className="h-11 px-8 font-bold shadow-sm w-full md:w-auto">
+              <Button type="submit" disabled={research.isPending} className="h-11 px-8 font-bold shadow-sm w-full md:w-auto shrink-0">
                 {research.isPending ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing</>
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 分析中…</>
                 ) : (
-                  <><Search className="mr-2 h-4 w-4" /> Analyze</>
+                  <><Search className="mr-2 h-4 w-4" /> 分析する</>
                 )}
               </Button>
             </form>
@@ -146,9 +163,9 @@ export function Research() {
       </Card>
 
       {research.isError && (
-        <div className="bg-destructive/10 text-destructive border border-destructive/20 p-4 rounded-md font-medium text-sm flex items-center">
-          <div className="w-2 h-2 rounded-full bg-destructive mr-3"></div>
-          {(research.error as any)?.message || "Failed to analyze URL"}
+        <div className="bg-destructive/10 text-destructive border border-destructive/20 p-4 rounded-md text-sm leading-relaxed">
+          <p className="font-semibold mb-1">エラー</p>
+          <p>{formatResearchError(research.error)}</p>
         </div>
       )}
 
@@ -157,7 +174,7 @@ export function Research() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="lg:col-span-1 border-0 shadow-sm ring-1 ring-border/50 overflow-hidden flex flex-col">
               <div className="bg-sidebar p-4 border-b border-sidebar-border">
-                <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm uppercase">Original Listing</h3>
+                <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm">入力した出品</h3>
               </div>
               <CardContent className="p-0 flex-1 flex flex-col">
                 <div className="aspect-[4/3] bg-muted relative border-b">
@@ -181,12 +198,12 @@ export function Research() {
                   </h3>
                   <div className="mt-auto">
                     <div className="flex justify-between items-baseline mb-4">
-                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Current Price</span>
+                      <span className="text-xs font-semibold text-muted-foreground">表示価格</span>
                       <span className="font-mono text-2xl font-extrabold tabular-nums">${result.originalItem.price.toFixed(2)}</span>
                     </div>
                     <Button variant="outline" className="w-full font-semibold border-primary/20 text-primary hover:bg-primary/5" asChild>
                       <a href={result.originalItem.url} target="_blank" rel="noreferrer">
-                        View on eBay <ExternalLink className="ml-2 h-4 w-4" />
+                        eBay で開く <ExternalLink className="ml-2 h-4 w-4" />
                       </a>
                     </Button>
                   </div>
@@ -196,7 +213,7 @@ export function Research() {
 
             <Card className="lg:col-span-2 border-0 shadow-sm ring-1 ring-border/50 flex flex-col">
               <div className="bg-sidebar p-4 border-b border-sidebar-border">
-                <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm uppercase">Lowest By Condition</h3>
+                <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm">コンディション別の最安</h3>
               </div>
               <CardContent className="p-0 flex-1 bg-muted/10">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5">
@@ -204,7 +221,7 @@ export function Research() {
                     <div key={condition} className="bg-card rounded-lg border shadow-sm overflow-hidden flex flex-col hover:border-primary/40 transition-colors">
                       <div className="p-3 border-b bg-muted/30 flex justify-between items-center">
                         <span className="font-bold text-sm truncate">{condition}</span>
-                        <Badge variant="outline" className="text-[10px] font-mono uppercase bg-background">Lowest</Badge>
+                        <Badge variant="outline" className="text-[10px] font-mono bg-background">最安</Badge>
                       </div>
                       <div className="p-4 flex gap-4">
                         <div className="w-16 h-16 rounded bg-muted shrink-0 border overflow-hidden flex items-center justify-center">
@@ -232,7 +249,7 @@ export function Research() {
                   ))}
                   {Object.keys(result.lowestByCondition).length === 0 && (
                     <div className="col-span-full py-12 text-center text-muted-foreground font-medium">
-                      No competing items found.
+                      同条件の競合が見つかりませんでした。
                     </div>
                   )}
                 </div>
@@ -243,7 +260,7 @@ export function Research() {
           <Card className="border-0 shadow-sm ring-1 ring-border/50">
             <div className="bg-sidebar p-4 border-b border-sidebar-border flex justify-between items-center">
               <h3 className="font-bold text-sidebar-foreground tracking-tight text-sm uppercase flex items-center">
-                All Listings <Badge variant="secondary" className="ml-3 bg-sidebar-accent text-sidebar-accent-foreground border-0">{result.allItems.length}</Badge>
+                すべての候補 <Badge variant="secondary" className="ml-3 bg-sidebar-accent text-sidebar-accent-foreground border-0">{result.allItems.length}</Badge>
               </h3>
             </div>
             <CardContent className="p-0">
@@ -252,12 +269,12 @@ export function Research() {
                   <TableHeader className="bg-muted/40">
                     <TableRow className="hover:bg-muted/40">
                       <TableHead className="w-12 text-center py-4"></TableHead>
-                      <TableHead className="w-48 py-4 font-semibold text-xs uppercase tracking-wider">Condition</TableHead>
-                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider text-right">Price</TableHead>
-                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider text-right">Shipping</TableHead>
-                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider text-right">Total</TableHead>
-                      <TableHead className="py-4 font-semibold text-xs uppercase tracking-wider">Seller</TableHead>
-                      <TableHead className="text-right py-4 font-semibold text-xs uppercase tracking-wider">Action</TableHead>
+                      <TableHead className="w-48 py-4 font-semibold text-xs">状態</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs text-right">価格</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs text-right">送料</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs text-right">合計</TableHead>
+                      <TableHead className="py-4 font-semibold text-xs">出品者</TableHead>
+                      <TableHead className="text-right py-4 font-semibold text-xs">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

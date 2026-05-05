@@ -826,6 +826,12 @@ components:
           type: boolean
         hasServiceAccount:
           type: boolean
+        databaseNeedsMigration:
+          type: boolean
+          description: True when Postgres schema is missing (run drizzle-kit push)
+        setupMessageJa:
+          type: string
+          description: User-facing hint in Japanese
       required:
         - isConfigured
         - hasServiceAccount

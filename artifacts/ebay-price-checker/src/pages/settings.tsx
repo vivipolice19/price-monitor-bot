@@ -22,7 +22,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, CheckCircle2, XCircle, TableProperties, RefreshCw, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEffect } from "react";
+import { Info, BookOpen } from "lucide-react";
 
 const sheetSchema = z.object({
   spreadsheetId: z.string().min(1, "Spreadsheet IDは必須です"),
@@ -54,8 +62,8 @@ export function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const { data: config, isLoading } = useGetSpreadsheetConfig({
-    query: { queryKey: getGetSpreadsheetConfigQueryKey() }
+  const { data: config, isLoading, isError, error } = useGetSpreadsheetConfig({
+    query: { queryKey: getGetSpreadsheetConfigQueryKey() },
   });
   
   const saveConfig = useSaveSpreadsheetConfig();
@@ -198,7 +206,7 @@ export function Settings() {
 
   if (isLoading) {
     return (
-      <div className="p-8 max-w-5xl mx-auto space-y-6">
+      <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-[300px] w-full" />
         <Skeleton className="h-[500px] w-full" />
@@ -206,12 +214,69 @@ export function Settings() {
     );
   }
 
-  return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Settings</h1>
-        <p className="text-muted-foreground mt-2">Configure API credentials and spreadsheet mappings.</p>
+  if (isError) {
+    return (
+      <div className="p-4 md:p-8 max-w-5xl mx-auto">
+        <Alert variant="destructive">
+          <AlertTitle>設定を読み込めません</AlertTitle>
+          <AlertDescription className="mt-2">
+            {(error as Error)?.message ||
+              "サーバーに接続できないか、エラーが返りました。しばらく待って再読み込みしてください。"}
+          </AlertDescription>
+        </Alert>
       </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6 md:space-y-8">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">設定</h1>
+        <p className="text-muted-foreground mt-2 text-sm md:text-base leading-relaxed">
+          下の項目は「シート連携・在庫同期・自動改定」を使うときに必要です。まずは<strong>左の「価格リサーチ」だけ使う</strong>場合、eBay の App ID を環境変数
+          <code className="mx-1 rounded bg-muted px-1">EBAY_APP_ID</code>
+          で渡すか、下のフォームに保存してください。
+        </p>
+      </div>
+
+      {config?.databaseNeedsMigration ? (
+        <Alert variant="destructive">
+          <AlertTitle>データベースの初期化が必要です</AlertTitle>
+          <AlertDescription className="mt-2 whitespace-pre-wrap">
+            {config.setupMessageJa ??
+              "PostgreSQL にテーブルがありません。リポジトリのルートで DATABASE_URL を設定し、pnpm exec drizzle-kit push を実行してください。"}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Accordion type="single" collapsible className="max-w-4xl rounded-lg border bg-card px-2">
+        <AccordionItem value="guide" className="border-0">
+          <AccordionTrigger className="px-3 py-3 text-left hover:no-underline">
+            <span className="flex items-center gap-2 font-semibold text-foreground">
+              <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+              使い方（開いて確認）
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="px-3 pb-4 text-sm text-muted-foreground leading-relaxed space-y-3">
+            <p>
+              <strong className="text-foreground">1. 価格リサーチ</strong>
+              ：トップで eBay URL を入れて「分析する」。シートは不要です。
+            </p>
+            <p>
+              <strong className="text-foreground">2. 監視・シート書き込み</strong>
+              ：Google のサービスアカウント JSON とスプレッドシート ID をここで保存し、「接続テスト」で確認します。
+            </p>
+            <p>
+              <strong className="text-foreground">3. 在庫サービス</strong>
+              ：Mercari→eBay 同期ツールの URL を「在庫チェック基準 URL」に入れ、必要なら API キーも設定します。
+            </p>
+            <p className="flex items-start gap-2 rounded-md bg-muted/50 p-3 text-xs">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              Render の無料プランはしばらく使わないとスリープし、初回アクセスが遅くなります。定期監視には有料プランや Cron の検討が必要です。
+            </p>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       <div className="max-w-4xl">
         <Card className="border-0 shadow-sm ring-1 ring-border/50">

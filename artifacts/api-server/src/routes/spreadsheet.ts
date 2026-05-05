@@ -12,6 +12,14 @@ import { triggerInventoryCheckerSync } from "../lib/inventoryChecker";
 
 const router = Router();
 
+function isMissingSpreadsheetTable(err: unknown): boolean {
+  const raw =
+    err && typeof err === "object" && "message" in err
+      ? String((err as { message: string }).message)
+      : String(err);
+  return /spreadsheet_config|42P01|does not exist|relation .* does not exist/i.test(raw);
+}
+
 router.get("/spreadsheet/config", async (req, res) => {
   try {
     const configs = await db.select().from(spreadsheetConfigTable).limit(1);
@@ -63,6 +71,24 @@ router.get("/spreadsheet/config", async (req, res) => {
       hasServiceAccount: !!config.serviceAccountJson,
     });
   } catch (err) {
+    if (isMissingSpreadsheetTable(err)) {
+      req.log.warn({ err }, "getSpreadsheetConfig: table missing");
+      res.json({
+        isConfigured: false,
+        hasServiceAccount: false,
+        hasEbayCredentials: false,
+        hasEbayOAuth: false,
+        inventoryCheckerBaseUrl: "",
+        hasInventoryCheckerApiKey: false,
+        inventoryStatusColumnIndex: 5,
+        ebayListingConditionColumnIndex: undefined,
+        ebayOAuthRedirectUri: "",
+        databaseNeedsMigration: true,
+        setupMessageJa:
+          "データベースにテーブルがありません。PCで drizzle-kit push を実行するか、管理者に依頼してください。",
+      });
+      return;
+    }
     req.log.error({ err }, "getSpreadsheetConfig failed");
     res.status(500).json({ error: "internal_error" });
   }

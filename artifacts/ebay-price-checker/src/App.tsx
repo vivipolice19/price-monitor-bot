@@ -11,7 +11,15 @@ import { Monitors } from "@/pages/monitors";
 import { Alerts } from "@/pages/alerts";
 import { Settings } from "@/pages/settings";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function Router() {
   return (

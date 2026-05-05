@@ -14,8 +14,15 @@ router.post("/research", async (req, res) => {
   }
 
   try {
-    const [config] = await db.select().from(spreadsheetConfigTable).limit(1);
-    const result = await researchEbayItem(url, { appId: config?.ebayAppId });
+    let appId: string | null | undefined;
+    try {
+      const [config] = await db.select().from(spreadsheetConfigTable).limit(1);
+      appId = config?.ebayAppId ?? undefined;
+    } catch (dbErr) {
+      req.log.warn({ err: dbErr }, "research: DB unavailable or schema missing; using env EBAY_APP_ID only");
+      appId = undefined;
+    }
+    const result = await researchEbayItem(url, { appId });
     res.json({
       ...result,
       searchedAt: new Date().toISOString(),
