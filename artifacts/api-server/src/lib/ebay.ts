@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { logger } from "./logger";
+import { getValidEbayUserAccessTokenFromDb } from "./ebayOAuth";
 
 export interface ProductIdentifiers {
   upc: string[];
@@ -33,6 +34,90 @@ type TradingCreds = {
   certId?: string | null;
   userToken?: string | null;
 };
+
+function normalizeConditionFromBrowse(value: string | undefined): string {
+  const v = (value ?? "").toUpperCase();
+  if (v === "NEW") return "New";
+  if (v === "USED_EXCELLENT" || v === "USED_VERY_GOOD" || v === "USED_GOOD" || v === "USED_ACCEPTABLE") {
+    return "Used";
+  }
+  if (v === "CERTIFIED_REFURBISHED" || v === "REFURBISHED") return "Refurbished";
+  return value?.trim() || "Unknown";
+}
+
+function toEbayItemFromBrowse(raw: any): EbayItem | null {
+  const itemId =
+    extractItemIdFromUrl(String(raw?.itemWebUrl ?? "")) ||
+    String(raw?.legacyItemId ?? "").trim();
+  if (!itemId) return null;
+  const price = parseFirstNumber(raw?.price?.value) ?? 0;
+  const shipping = parseFirstNumber(raw?.shippingOptions?.[0]?.shippingCost?.value) ?? 0;
+  return {
+    itemId,
+    title: String(raw?.title ?? "").trim(),
+    price,
+    currency: String(raw?.price?.currency ?? "USD"),
+    condition: normalizeConditionFromBrowse(raw?.condition),
+    conditionId: undefined,
+    seller: String(raw?.seller?.username ?? "").trim() || undefined,
+    url: String(raw?.itemWebUrl ?? `https://www.ebay.com/itm/${itemId}`),
+    shippingCost: shipping,
+    totalPrice: price + shipping,
+    imageUrl: raw?.image?.imageUrl || raw?.thumbnailImages?.[0]?.imageUrl,
+    location: String(raw?.itemLocation?.country ?? "").trim() || undefined,
+  };
+}
+
+async function fetchEbayItemByBrowseApi(itemId: string, accessToken: string): Promise<EbayItem | null> {
+  try {
+    const resp = await axios.get("https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id", {
+      params: { legacy_item_id: itemId },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      timeout: 12000,
+      validateStatus: () => true,
+    });
+    if (resp.status !== 200) {
+      logger.warn({ itemId, status: resp.status, data: resp.data }, "Browse API get_item_by_legacy_id failed");
+      return null;
+    }
+    return toEbayItemFromBrowse(resp.data);
+  } catch (err) {
+    logger.warn({ err, itemId }, "Browse API item fetch failed");
+    return null;
+  }
+}
+
+async function searchItemsByTitleBrowse(originalItem: EbayItem, accessToken: string): Promise<EbayItem[]> {
+  try {
+    const keywords = originalItem.title.split(" ").slice(0, 8).join(" ").trim();
+    if (!keywords) return [];
+    const resp = await axios.get("https://api.ebay.com/buy/browse/v1/item_summary/search", {
+      params: {
+        q: keywords,
+        limit: 50,
+        sort: "price",
+      },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      timeout: 12000,
+      validateStatus: () => true,
+    });
+    if (resp.status !== 200) {
+      logger.warn({ status: resp.status, data: resp.data, keywords }, "Browse API search failed");
+      return [];
+    }
+    const items = Array.isArray(resp.data?.itemSummaries) ? resp.data.itemSummaries : [];
+    return items
+      .map((it: any) => toEbayItemFromBrowse(it))
+      .filter((it: EbayItem | null): it is EbayItem => Boolean(it));
+  } catch (err) {
+    logger.warn({ err }, "Browse API title search failed");
+    return [];
+  }
+}
 
 function toEbayItemFromFinding(item: any): EbayItem {
   const price =
@@ -647,14 +732,18 @@ async function enrichItemsWithShoppingApi(items: EbayItem[], appId: string, conc
 export async function fetchListingCondition(ebayUrl: string, appId?: string | null): Promise<string> {
   const resolved = appId ?? process.env.EBAY_APP_ID ?? "";
   const itemId = extractItemIdFromUrl(ebayUrl);
+  const accessToken = await getValidEbayUserAccessTokenFromDb();
+  if (itemId && accessToken) {
+    const viaBrowse = await fetchEbayItemByBrowseApi(itemId, accessToken);
+    if (viaBrowse?.condition) return viaBrowse.condition;
+  }
   if (itemId && resolved) {
     const item = await fetchEbayItemByApi(itemId, resolved);
     if (item?.condition) return item.condition;
     const viaFinding = await fetchEbayItemByFindingItemId(itemId, resolved);
     if (viaFinding?.condition) return viaFinding.condition;
   }
-  const scraped = await scrapeEbayItem(ebayUrl);
-  return scraped?.condition ?? "Unknown";
+  return "Unknown";
 }
 
 export async function researchEbayItem(
@@ -668,10 +757,15 @@ export async function researchEbayItem(
 }> {
   const appId = options?.appId ?? process.env.EBAY_APP_ID ?? undefined;
   const itemId = extractItemIdFromUrl(url);
+  const accessToken = await getValidEbayUserAccessTokenFromDb();
 
   let originalItem: EbayItem | null = null;
 
-  if (itemId && appId) {
+  if (itemId && accessToken) {
+    originalItem = await fetchEbayItemByBrowseApi(itemId, accessToken);
+  }
+
+  if (!originalItem && itemId && appId) {
     originalItem = await fetchEbayItemByApi(itemId, appId);
   }
 
@@ -688,13 +782,8 @@ export async function researchEbayItem(
     originalItem = await fetchEbayItemByFindingItemId(itemId, appId);
   }
 
-  if (!originalItem && !appId) {
-    // No API credentials at all: last resort only.
-    originalItem = await scrapeEbayItem(url);
-  }
-
   if (!originalItem) {
-    throw new Error("eBay APIから商品情報を取得できませんでした。EBAY_APP_ID（必要ならDEV/CERT/USER_TOKEN）を確認してください。");
+    throw new Error("eBay APIから商品情報を取得できませんでした。設定で eBay OAuth 連携（推奨）または AppID/DevID/CertID/UserToken を確認してください。");
   }
 
   // If listing detail fetch succeeded but price is missing/0, try Finding API hint.
@@ -710,7 +799,18 @@ export async function researchEbayItem(
     throw new Error("商品価格を取得できませんでした（eBay側の取得制限またはAPI応答不足）。");
   }
 
-  const foundItems = await searchItemsByTitle(originalItem, appId);
+  const [browseItems, findingItems] = await Promise.all([
+    accessToken ? searchItemsByTitleBrowse(originalItem, accessToken) : Promise.resolve([]),
+    searchItemsByTitle(originalItem, appId),
+  ]);
+  const dedupMap = new Map<string, EbayItem>();
+  for (const item of [...browseItems, ...findingItems]) {
+    if (!item.totalPrice || item.totalPrice <= 0) continue;
+    const key = item.itemId || item.url;
+    if (!key) continue;
+    if (!dedupMap.has(key)) dedupMap.set(key, item);
+  }
+  const foundItems = Array.from(dedupMap.values());
 
   let prelim = foundItems.filter((item) => {
     if (item.itemId && originalItem!.itemId && item.itemId === originalItem!.itemId) return true;
