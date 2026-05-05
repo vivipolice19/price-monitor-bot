@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import type { SpreadsheetConfigRequest } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { formatColumnHint } from "@/lib/columnLabel";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +97,23 @@ export function Settings() {
       ebayUserToken: "",
       serviceAccountJson: "",
     }
+  });
+
+  const watchedCols = useWatch({
+    control: sheetForm.control,
+    name: [
+      "sourceUrlColumnIndex",
+      "ebayUrlColumnIndex",
+      "inventoryStatusColumnIndex",
+      "myPriceColumnIndex",
+      "priceColumnIndex",
+      "alertColumnIndex",
+    ],
+  });
+  const w = Array.isArray(watchedCols) ? watchedCols.map((x) => Number(x) || 0) : [0, 1, 5, 3, 6, 5];
+  const condColWatch = useWatch({
+    control: sheetForm.control,
+    name: "ebayListingConditionColumnIndex",
   });
 
   useEffect(() => {
@@ -241,15 +259,25 @@ export function Settings() {
 
       {config?.databaseNeedsMigration ? (
         <Alert variant="destructive">
-          <AlertTitle>データベースの初期化が必要です</AlertTitle>
-          <AlertDescription className="mt-2 whitespace-pre-wrap">
-            {config.setupMessageJa ??
-              "PostgreSQL にテーブルがありません。リポジトリのルートで DATABASE_URL を設定し、pnpm exec drizzle-kit push を実行してください。"}
+          <AlertTitle>データベース（保存先のテーブル）がまだありません</AlertTitle>
+          <AlertDescription className="mt-2 space-y-3 text-sm leading-relaxed whitespace-pre-wrap">
+            <p>
+              <strong>いまこれはどういう意味？</strong>
+              「初期化」とは、このアプリが設定や監視一覧を Postgres に<strong>書き込むための箱（テーブル）</strong>をまだ持っていない、という状態です。リサーチ画面だけ試すときはサーバー側の環境変数{" "}
+              <code className="rounded bg-muted px-1 py-px">EBAY_APP_ID</code>
+              があれば動くこともありますが、<strong>この「設定」を保存したい</strong>
+              ときはテーブルが必要です。
+            </p>
+            <p>{config.setupMessageJa}</p>
           </AlertDescription>
         </Alert>
       ) : null}
 
-      <Accordion type="single" collapsible className="max-w-4xl rounded-lg border bg-card px-2">
+      <Accordion
+        type="multiple"
+        defaultValue={["guide", "faq"]}
+        className="max-w-4xl rounded-lg border bg-card px-2"
+      >
         <AccordionItem value="guide" className="border-0">
           <AccordionTrigger className="px-3 py-3 text-left hover:no-underline">
             <span className="flex items-center gap-2 font-semibold text-foreground">
@@ -276,6 +304,36 @@ export function Settings() {
             </p>
           </AccordionContent>
         </AccordionItem>
+        <AccordionItem value="faq" className="border-t">
+          <AccordionTrigger className="px-3 py-3 text-left hover:no-underline">
+            <span className="flex items-center gap-2 font-semibold text-foreground">
+              <Info className="h-4 w-4 shrink-0 text-primary" />
+              用語のむずかしいところだけ
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="px-3 pb-4 text-sm text-muted-foreground leading-relaxed space-y-3">
+            <p>
+              <strong className="text-foreground">「0始まりの列」</strong>
+              ：スプレッドシートで左から数えて{" "}
+              <strong>A列を0</strong>
+              と数えます。下の入力欄の近くに「今の値は A/B 列」を表示します。（デフォルト A=メルカリ等のURL列、B=eBay出品URL列）はよくある並びです。違えば自分のシートに合わせて変えます。
+            </p>
+            <p>
+              <strong className="text-foreground">リサーチ画面の「シート行（任意）」</strong>
+              ：Googleシート連携済みで、一覧の<strong>自分の売価</strong>
+              がシートにある行を自動で読みたいときに、その行番号です。画面上の<strong>見えている行番号と同じ</strong>
+              数字を入れます（例：
+              <strong className="text-foreground">
+                ヘッダーが1行目ならデータの5行目に「5」と入れる／「取得」ボタンで自分の売価欄だけ読み込む
+              </strong>
+              ）。シートを使わないなら<strong>何も入力しなくてよいです</strong>。
+            </p>
+            <p>
+              <strong className="text-foreground">「出品コンディション列（任意）」</strong>
+              ：シートで New / Used などの状態を自分で持っているときだけ列番号を入れる欄です。空欄なら自動で入手を試します。
+            </p>
+          </AccordionContent>
+        </AccordionItem>
       </Accordion>
 
       <div className="max-w-4xl">
@@ -283,8 +341,10 @@ export function Settings() {
           <CardHeader className="bg-muted/30 border-b">
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="flex items-center text-lg"><TableProperties className="mr-2 h-5 w-5 text-primary" /> Google Sheets Sync</CardTitle>
-                <CardDescription>Map columns for automatic price sync.</CardDescription>
+                <CardTitle className="flex items-center text-lg">
+                  <TableProperties className="mr-2 h-5 w-5 text-primary" /> Googleスプレッドシート連携
+                </CardTitle>
+                <CardDescription>監視・書き込みに使う列位置を確認します。「0=A列」を下のヘルパーで確認してください。</CardDescription>
               </div>
               <div className="flex flex-wrap gap-2 justify-end">
                 {config?.hasServiceAccount ? (
@@ -318,10 +378,17 @@ export function Settings() {
                     name="spreadsheetId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Spreadsheet ID</FormLabel>
+                        <FormLabel className="font-semibold text-sm text-foreground">
+                          スプレッドシート ID（URL の /d/ と /edit のあいだの長い文字列）
+                        </FormLabel>
                         <FormControl>
-                          <Input placeholder="1BxiMVs0XRYFgwn..." className="font-mono text-sm" {...field} />
+                          <Input
+                            placeholder="例: （あなたのシートからコピー）"
+                            className="font-mono text-sm"
+                            {...field}
+                          />
                         </FormControl>
+                        <FormDescription>シート連携しない場合はどこにも不要です。</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -332,9 +399,9 @@ export function Settings() {
                     name="sheetName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Sheet Name</FormLabel>
+                        <FormLabel className="font-semibold text-sm text-foreground">シートの名前（一覧タブ）</FormLabel>
                         <FormControl>
-                          <Input placeholder="Sheet1" {...field} />
+                          <Input placeholder="ほとんどの場合 Sheet1" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -342,15 +409,21 @@ export function Settings() {
                   />
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+                    <p className="col-span-full text-xs text-muted-foreground leading-relaxed">
+                      「列」の数字は左から<strong>0=A列</strong>です。入力すると右の説明文が現在の対応を示します。
+                    </p>
                     <FormField
                       control={sheetForm.control}
                       name="sourceUrlColumnIndex"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground leading-tight">仕入先URL列(0始まり)</FormLabel>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            仕入／出品元などの参照URL列（0=A）
+                          </FormLabel>
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[0]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -360,10 +433,13 @@ export function Settings() {
                       name="ebayUrlColumnIndex"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground leading-tight">eBay URL列(0始まり)</FormLabel>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            eBay 出品URL列（0=A）
+                          </FormLabel>
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[1]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -373,10 +449,13 @@ export function Settings() {
                       name="inventoryStatusColumnIndex"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground leading-tight">在庫状態列(0始まり)</FormLabel>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            在庫・ステータス列（任意で変更）
+                          </FormLabel>
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[2]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -386,10 +465,19 @@ export function Settings() {
                       name="ebayListingConditionColumnIndex"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground leading-tight">出品コンディション列(任意)</FormLabel>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            状態（新品中古など）を書いた列・番号のみ
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="空欄でAPI取得" className="tabular-nums" {...field} />
+                            <Input placeholder="空欄で自動取得OK" className="tabular-nums" {...field} />
                           </FormControl>
+                          <FormDescription>
+                            {condColWatch != null &&
+                            String(condColWatch).trim() !== "" &&
+                            !Number.isNaN(Number(condColWatch))
+                              ? formatColumnHint(Number(condColWatch))
+                              : "空欄で eBay から状態を読み込み試行"}
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -456,16 +544,19 @@ export function Settings() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                     <FormField
                       control={sheetForm.control}
                       name="myPriceColumnIndex"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground leading-tight">My Price Col (0-based)</FormLabel>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            自分の売価（USD など）
+                          </FormLabel>
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[3]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -475,10 +566,13 @@ export function Settings() {
                       name="priceColumnIndex"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground leading-tight">Comp. Price Col (0-based)</FormLabel>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            競合／最安（書き込み先）
+                          </FormLabel>
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[4]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -488,10 +582,13 @@ export function Settings() {
                       name="alertColumnIndex"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground leading-tight">Alert Flag Col (0-based)</FormLabel>
+                          <FormLabel className="font-semibold text-xs text-foreground leading-tight">
+                            アラートON/OFF やメモを書く列
+                          </FormLabel>
                           <FormControl>
                             <Input type="number" className="tabular-nums" {...field} />
                           </FormControl>
+                          <FormDescription>{formatColumnHint(Number(w[5]))}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

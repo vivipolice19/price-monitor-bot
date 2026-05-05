@@ -113,10 +113,14 @@ export function Research() {
                   name="row"
                   render={({ field }) => (
                     <FormItem className="w-full sm:w-28">
-                      <FormLabel className="font-semibold text-sm text-foreground">② シート行（任意）</FormLabel>
+                      <FormLabel className="font-semibold text-sm text-foreground">② シートの行番号（任意）</FormLabel>
                       <FormControl>
-                        <Input placeholder="例: 5" className="h-11 tabular-nums focus-visible:ring-primary/30 shadow-sm" inputMode="numeric" {...field} />
+                        <Input placeholder="例: 5 （シート左の行番号と同じ）" className="h-11 tabular-nums focus-visible:ring-primary/30 shadow-sm" inputMode="numeric" {...field} />
                       </FormControl>
+                      <p className="text-xs text-muted-foreground leading-snug pt-1">
+                        Googleシート連携済みで、その行にある<strong>自分の売価</strong>を自動で読み込みたいときだけ入力。「取得」を押すと自分の売価欄に読み込みます。シートを使わないときは<strong>空欄でそのままでOK</strong>
+                        です。
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}

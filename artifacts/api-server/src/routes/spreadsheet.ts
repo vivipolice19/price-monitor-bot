@@ -85,7 +85,7 @@ router.get("/spreadsheet/config", async (req, res) => {
         ebayOAuthRedirectUri: "",
         databaseNeedsMigration: true,
         setupMessageJa:
-          "データベースにテーブルがありません。PCで drizzle-kit push を実行するか、管理者に依頼してください。",
+          "PostgreSQL にまだテーブルがありません。Render の環境変数 DATABASE_URL が付いた状態でサービスを再デプロイすると、ビルド時にテーブルを自動作成します。DATABASE_URL を今付けた直後なら Manual Deploy で再ビルドしてください。自分のPCから行う場合は lib/db で pnpm exec drizzle-kit push と同等の処理です。",
       });
       return;
     }
