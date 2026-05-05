@@ -77,7 +77,8 @@ function parseShoppingItemIdentifiers(item: any): ProductIdentifiers {
 
 async function fetchEbayItemByApi(itemId: string, appId: string): Promise<EbayItem | null> {
   try {
-    const resp = await axios.get("https://api.ebay.com/shopping", {
+    // Shopping API endpoint is open.api.ebay.com (api.ebay.com may fail depending on routing).
+    const resp = await axios.get("https://open.api.ebay.com/shopping", {
       params: {
         callname: "GetSingleItem",
         responseencoding: "JSON",
@@ -88,7 +89,16 @@ async function fetchEbayItemByApi(itemId: string, appId: string): Promise<EbayIt
         IncludeSelector: "Description,ItemSpecifics,ShippingCosts",
       },
       timeout: 10000,
+      validateStatus: () => true,
     });
+
+    if (resp.status !== 200) {
+      logger.warn(
+        { status: resp.status, itemId, data: resp.data },
+        "eBay Shopping API non-200 response",
+      );
+      return null;
+    }
 
     const item = resp.data?.Item;
     if (!item) return null;
@@ -113,7 +123,7 @@ async function fetchEbayItemByApi(itemId: string, appId: string): Promise<EbayIt
       identifiers,
     };
   } catch (err) {
-    logger.warn({ err, itemId }, "eBay API call failed, falling back to scrape");
+    logger.warn({ err, itemId }, "eBay Shopping API call failed, falling back to scrape");
     return null;
   }
 }
