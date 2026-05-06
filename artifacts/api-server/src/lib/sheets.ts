@@ -6,6 +6,19 @@ import { eq, and } from "drizzle-orm";
 import { fetchInventoryCheckerProducts } from "./inventoryChecker";
 import { extractItemIdFromUrl, fetchListingCondition } from "./ebay";
 
+// Keep monitoring columns fixed so old saved settings never drift writes.
+const MONITOR_COLS = {
+  lowestPrice: 8, // I
+  lowestCondition: 9, // J
+  lastCheck: 10, // K
+  alertStatus: 11, // L
+  repricedValue: 12, // M
+  evidenceUrls: 13, // N
+  trackedTargetUrl: 14, // O
+  trackedTargetCondition: 15, // P
+  trackedTargetPrice: 16, // Q
+} as const;
+
 async function getSheets(): Promise<{ sheets: sheets_v4.Sheets; config: typeof spreadsheetConfigTable.$inferSelect } | null> {
   const configs = await db.select().from(spreadsheetConfigTable).limit(1);
   const config = configs[0];
@@ -92,15 +105,15 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   if (!config.spreadsheetId || !config.sheetName) return;
 
   const updates = [
-    { col: config.lowestPriceColumnIndex ?? 8, title: "最安値(同一商品)" },
-    { col: config.lowestConditionColumnIndex ?? 9, title: "最安値コンディション" },
-    { col: config.lastCheckColumnIndex ?? 10, title: "最終チェック" },
-    { col: config.alertStatusColumnIndex ?? 11, title: "アラート状態" },
-    { col: config.repricedValueColumnIndex ?? 12, title: "自動改定価格" },
-    { col: config.evidenceUrlsColumnIndex ?? 13, title: "リサーチ根拠URL" },
-    { col: config.trackedTargetUrlColumnIndex ?? 14, title: "追跡対象URL" },
-    { col: config.trackedTargetConditionColumnIndex ?? 15, title: "追跡対象コンディション" },
-    { col: config.trackedTargetPriceColumnIndex ?? 16, title: "追跡対象価格(USD)" },
+    { col: MONITOR_COLS.lowestPrice, title: "最安値(同一商品)" },
+    { col: MONITOR_COLS.lowestCondition, title: "最安値コンディション" },
+    { col: MONITOR_COLS.lastCheck, title: "最終チェック" },
+    { col: MONITOR_COLS.alertStatus, title: "アラート状態" },
+    { col: MONITOR_COLS.repricedValue, title: "自動改定価格" },
+    { col: MONITOR_COLS.evidenceUrls, title: "リサーチ根拠URL" },
+    { col: MONITOR_COLS.trackedTargetUrl, title: "追跡対象URL" },
+    { col: MONITOR_COLS.trackedTargetCondition, title: "追跡対象コンディション" },
+    { col: MONITOR_COLS.trackedTargetPrice, title: "追跡対象価格(USD)" },
   ];
 
   await sheets.spreadsheets.values.batchUpdate({
@@ -136,15 +149,15 @@ export async function appendMonitorRowToSpreadsheet(params: {
   const condCol = config.ebayListingConditionColumnIndex;
 
   const extraCols = [
-    config.lowestPriceColumnIndex ?? 8,
-    config.lowestConditionColumnIndex ?? 9,
-    config.lastCheckColumnIndex ?? 10,
-    config.alertStatusColumnIndex ?? 11,
-    config.repricedValueColumnIndex ?? 12,
-    config.evidenceUrlsColumnIndex ?? 13,
-    config.trackedTargetUrlColumnIndex ?? 14,
-    config.trackedTargetConditionColumnIndex ?? 15,
-    config.trackedTargetPriceColumnIndex ?? 16,
+    MONITOR_COLS.lowestPrice,
+    MONITOR_COLS.lowestCondition,
+    MONITOR_COLS.lastCheck,
+    MONITOR_COLS.alertStatus,
+    MONITOR_COLS.repricedValue,
+    MONITOR_COLS.evidenceUrls,
+    MONITOR_COLS.trackedTargetUrl,
+    MONITOR_COLS.trackedTargetCondition,
+    MONITOR_COLS.trackedTargetPrice,
   ];
 
   const all = [sourceCol, ebayCol, myPriceCol, statusCol, ...extraCols];
@@ -161,12 +174,9 @@ export async function appendMonitorRowToSpreadsheet(params: {
   }
 
   // Tracked-target columns (monitoring columns) are useful even before the first check runs.
-  const trackedTargetUrlIndex = config.trackedTargetUrlColumnIndex ?? 14;
-  const trackedTargetConditionIndex = config.trackedTargetConditionColumnIndex ?? 15;
-  const trackedTargetPriceIndex = config.trackedTargetPriceColumnIndex ?? 16;
-  row[trackedTargetUrlIndex] = params.ebayUrl;
-  row[trackedTargetConditionIndex] = params.myCondition ? String(params.myCondition) : "";
-  row[trackedTargetPriceIndex] = params.myPrice;
+  row[MONITOR_COLS.trackedTargetUrl] = params.ebayUrl;
+  row[MONITOR_COLS.trackedTargetCondition] = params.myCondition ? String(params.myCondition) : "";
+  row[MONITOR_COLS.trackedTargetPrice] = params.myPrice;
 
   const resp = await sheets.spreadsheets.values.append({
     spreadsheetId: config.spreadsheetId,
@@ -593,15 +603,15 @@ export async function updateMonitorRowStatus(params: {
   const { sheets, config } = result;
   if (!config.spreadsheetId || !config.sheetName) return;
 
-  const lowestPriceCol = columnIndexToLetter(config.lowestPriceColumnIndex ?? 8);
-  const lowestConditionCol = columnIndexToLetter(config.lowestConditionColumnIndex ?? 9);
-  const lastCheckCol = columnIndexToLetter(config.lastCheckColumnIndex ?? 10);
-  const alertStatusCol = columnIndexToLetter(config.alertStatusColumnIndex ?? 11);
-  const repricedCol = columnIndexToLetter(config.repricedValueColumnIndex ?? 12);
-  const evidenceCol = columnIndexToLetter(config.evidenceUrlsColumnIndex ?? 13);
-  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 14);
-  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 15);
-  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 16);
+  const lowestPriceCol = columnIndexToLetter(MONITOR_COLS.lowestPrice);
+  const lowestConditionCol = columnIndexToLetter(MONITOR_COLS.lowestCondition);
+  const lastCheckCol = columnIndexToLetter(MONITOR_COLS.lastCheck);
+  const alertStatusCol = columnIndexToLetter(MONITOR_COLS.alertStatus);
+  const repricedCol = columnIndexToLetter(MONITOR_COLS.repricedValue);
+  const evidenceCol = columnIndexToLetter(MONITOR_COLS.evidenceUrls);
+  const trackedTargetUrlCol = columnIndexToLetter(MONITOR_COLS.trackedTargetUrl);
+  const trackedTargetConditionCol = columnIndexToLetter(MONITOR_COLS.trackedTargetCondition);
+  const trackedTargetPriceCol = columnIndexToLetter(MONITOR_COLS.trackedTargetPrice);
 
   const evidence = (params.evidenceUrls ?? []).slice(0, 5).join("\n");
 
@@ -635,9 +645,9 @@ export async function updateTrackedTargetCells(params: {
   const { sheets, config } = result;
   if (!config.spreadsheetId || !config.sheetName) return;
 
-  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 14);
-  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 15);
-  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 16);
+  const trackedTargetUrlCol = columnIndexToLetter(MONITOR_COLS.trackedTargetUrl);
+  const trackedTargetConditionCol = columnIndexToLetter(MONITOR_COLS.trackedTargetCondition);
+  const trackedTargetPriceCol = columnIndexToLetter(MONITOR_COLS.trackedTargetPrice);
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
@@ -676,8 +686,8 @@ export async function syncAlertsToSpreadsheet(): Promise<{ synced: number; faile
   let synced = 0;
   let failed = 0;
 
-  const alertColLetter = columnIndexToLetter(config.alertColumnIndex ?? 11);
-  const priceColLetter = columnIndexToLetter(config.priceColumnIndex ?? 8);
+  const alertColLetter = columnIndexToLetter(MONITOR_COLS.alertStatus);
+  const priceColLetter = columnIndexToLetter(MONITOR_COLS.lowestPrice);
 
   for (const { alert, monitor } of unsyncedAlerts) {
     if (!monitor.spreadsheetRow) {
