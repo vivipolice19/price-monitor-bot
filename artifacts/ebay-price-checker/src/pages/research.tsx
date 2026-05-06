@@ -261,7 +261,7 @@ export function Research() {
                     <div key={condition} className="bg-card rounded-lg border shadow-sm overflow-hidden flex flex-col hover:border-primary/40 transition-colors">
                       <div className="p-3 border-b bg-muted/30 flex justify-between items-center">
                         <span className="font-bold text-sm truncate">{condition}</span>
-                        <Badge variant="outline" className="text-[10px] font-mono bg-background">最安</Badge>
+                        <Badge variant="outline" className="text-[10px] font-mono bg-background">候補内の最安</Badge>
                       </div>
                       <div className="p-4 flex gap-4">
                         <div className="w-16 h-16 rounded bg-muted shrink-0 border overflow-hidden flex items-center justify-center">
@@ -281,9 +281,26 @@ export function Research() {
                         </div>
                       </div>
                       <div className="px-4 py-3 bg-muted/20 border-t mt-auto">
-                        <Button size="sm" variant="default" className="w-full font-bold shadow-sm" onClick={() => setSelectedItemForMonitor(item)}>
-                          <PlusCircle className="mr-2 h-4 w-4" /> 監視
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 font-semibold border-primary/20 text-primary hover:bg-primary/5"
+                            asChild
+                          >
+                            <a href={item.url} target="_blank" rel="noreferrer">
+                              eBayで開く <ExternalLink className="ml-2 h-4 w-4" />
+                            </a>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="flex-1 font-bold shadow-sm"
+                            onClick={() => setSelectedItemForMonitor(item)}
+                          >
+                            <PlusCircle className="mr-2 h-4 w-4" /> 監視
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
