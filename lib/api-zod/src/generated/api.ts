@@ -110,6 +110,18 @@ export const ResearchPriceResponse = zod.object({
       buyApiAuth: zod
         .enum(["oauth_user_refresh", "client_credentials", "none"])
         .optional(),
+      oauthClientCredAttempted: zod
+        .boolean()
+        .optional()
+        .describe("OAuth client_credentials を試行したか"),
+      oauthClientCredHttpStatus: zod
+        .number()
+        .nullish()
+        .describe("最終試行の HTTP ステータス（成功時は 200）"),
+      oauthClientCredErrorJa: zod
+        .string()
+        .nullish()
+        .describe("eBay が返した OAuth エラー要約（日本語混入の可能性あり）"),
       browseGetItemHttpStatus: zod.number().nullish(),
       shoppingHadPositivePrice: zod.boolean().optional(),
       tradingAck: zod.string().nullish(),
@@ -246,6 +258,18 @@ export const InventoryResearchProductResponse = zod
         buyApiAuth: zod
           .enum(["oauth_user_refresh", "client_credentials", "none"])
           .optional(),
+        oauthClientCredAttempted: zod
+          .boolean()
+          .optional()
+          .describe("OAuth client_credentials を試行したか"),
+        oauthClientCredHttpStatus: zod
+          .number()
+          .nullish()
+          .describe("最終試行の HTTP ステータス（成功時は 200）"),
+        oauthClientCredErrorJa: zod
+          .string()
+          .nullish()
+          .describe("eBay が返した OAuth エラー要約（日本語混入の可能性あり）"),
         browseGetItemHttpStatus: zod.number().nullish(),
         shoppingHadPositivePrice: zod.boolean().optional(),
         tradingAck: zod.string().nullish(),

@@ -13,6 +13,12 @@ import type { ResearchDiagnosticsBuyApiAuth } from "./researchDiagnosticsBuyApiA
 export interface ResearchDiagnostics {
   itemId?: string | null;
   buyApiAuth?: ResearchDiagnosticsBuyApiAuth;
+  /** OAuth client_credentials を試行したか */
+  oauthClientCredAttempted?: boolean;
+  /** 最終試行の HTTP ステータス（成功時は 200） */
+  oauthClientCredHttpStatus?: number | null;
+  /** eBay が返した OAuth エラー要約（日本語混入の可能性あり） */
+  oauthClientCredErrorJa?: string | null;
   browseGetItemHttpStatus?: number | null;
   shoppingHadPositivePrice?: boolean;
   tradingAck?: string | null;

@@ -7,6 +7,10 @@ import { getBuyApiAccessTokenFromDb } from "./ebayOAuth";
 export type EbayResearchDiagnostics = {
   itemId: string | null;
   buyApiAuth: "oauth_user_refresh" | "client_credentials" | "none";
+  /** OAuth client_credentials を試したか／eBay が返したエラー（「未保存」と誤解しないため） */
+  oauthClientCredAttempted: boolean;
+  oauthClientCredHttpStatus: number | null;
+  oauthClientCredErrorJa: string | null;
   browseGetItemHttpStatus: number | null;
   shoppingHadPositivePrice: boolean;
   tradingAck: string | null;
@@ -877,7 +881,7 @@ export async function researchEbayItem(
 }> {
   const appId = options?.appId ?? process.env.EBAY_APP_ID ?? undefined;
   const itemId = extractItemIdFromUrl(url);
-  const { token: accessToken, authMethod } = await getBuyApiAccessTokenFromDb();
+  const { token: accessToken, authMethod, clientCredentialsAttempt } = await getBuyApiAccessTokenFromDb();
   const buyApiAuth =
     authMethod === "oauth_user_refresh" || authMethod === "client_credentials" ? authMethod : "none";
 
@@ -1017,9 +1021,18 @@ export async function researchEbayItem(
 
   const hintsJa: string[] = [];
   if (buyApiAuth === "none") {
-    hintsJa.push(
-      "Browse API 用トークンがありません。設定の「OAuth Client Secret」または「eBay Cert ID」を保存してください。",
-    );
+    if (clientCredentialsAttempt.attempted && clientCredentialsAttempt.httpStatus && clientCredentialsAttempt.httpStatus !== 200) {
+      hintsJa.push(
+        `Browse 用トークン取得（OAuth client_credentials）が eBay 側で失敗しました。HTTP ${clientCredentialsAttempt.httpStatus}` +
+          (clientCredentialsAttempt.errorJa ? ` — ${clientCredentialsAttempt.errorJa}` : ""),
+      );
+    } else if (!clientCredentialsAttempt.attempted) {
+      hintsJa.push(
+        "Browse 用の資格情報が不足しています。設定に eBay App ID と、eBay Cert ID（または OAuth Client Secret）を保存してください。",
+      );
+    } else {
+      hintsJa.push("Browse 用トークンを取得できませんでした。");
+    }
   }
   if (browseGetItemHttpStatus != null && browseGetItemHttpStatus !== 200) {
     hintsJa.push(`Browse 商品取得が HTTP ${browseGetItemHttpStatus} で失敗しました。Client Secret・キー有効性を確認してください。`);
@@ -1040,6 +1053,9 @@ export async function researchEbayItem(
   const diagnostics: EbayResearchDiagnostics = {
     itemId,
     buyApiAuth,
+    oauthClientCredAttempted: clientCredentialsAttempt.attempted,
+    oauthClientCredHttpStatus: clientCredentialsAttempt.httpStatus,
+    oauthClientCredErrorJa: clientCredentialsAttempt.errorJa,
     browseGetItemHttpStatus,
     shoppingHadPositivePrice,
     tradingAck,

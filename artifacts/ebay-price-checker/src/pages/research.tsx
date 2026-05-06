@@ -191,6 +191,9 @@ export function Research() {
                   {JSON.stringify(
                     {
                       buyApiAuth: result.diagnostics.buyApiAuth,
+                      oauthClientCredAttempted: result.diagnostics.oauthClientCredAttempted,
+                      oauthClientCredHttpStatus: result.diagnostics.oauthClientCredHttpStatus,
+                      oauthClientCredErrorJa: result.diagnostics.oauthClientCredErrorJa,
                       browseGetItemHttpStatus: result.diagnostics.browseGetItemHttpStatus,
                       shoppingHadPositivePrice: result.diagnostics.shoppingHadPositivePrice,
                       tradingAck: result.diagnostics.tradingAck,

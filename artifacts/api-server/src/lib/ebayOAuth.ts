@@ -87,7 +87,9 @@ export async function getValidEbayUserAccessTokenFromDb(): Promise<string | null
   const clientId = config.ebayAppId ?? process.env.EBAY_OAUTH_CLIENT_ID ?? "";
   const clientSecret =
     config.ebayOAuthClientSecret ??
+    config.ebayCertId ??
     process.env.EBAY_OAUTH_CLIENT_SECRET ??
+    process.env.EBAY_CERT_ID ??
     "";
 
   if (!clientId || !clientSecret || !config.ebayOAuthRefreshToken) {
@@ -125,42 +127,77 @@ export async function getValidEbayUserAccessTokenFromDb(): Promise<string | null
   }
 }
 
-/** Scopes for Browse/Buy read APIs with application (client_credentials) tokens — same pattern as the inventory app. */
-const BUY_APPLICATION_SCOPE =
-  "https://api.ebay.com/oauth/api_scope/buy.item.read https://api.ebay.com/oauth/api_scope/buy.marketplace.read";
+/** Try several scopes — some keysets reject combined Buy scopes until enabled in Developer Console. */
+const BUY_CLIENT_CRED_SCOPE_CANDIDATES = [
+  "https://api.ebay.com/oauth/api_scope/buy.item.read https://api.ebay.com/oauth/api_scope/buy.marketplace.read",
+  "https://api.ebay.com/oauth/api_scope/buy.item.read",
+  "https://api.ebay.com/oauth/api_scope/buy.marketplace.read",
+  "https://api.ebay.com/oauth/api_scope",
+];
 
-export async function fetchApplicationAccessToken(params: {
+function summarizeOAuthIdentityError(data: unknown): string {
+  if (data == null) return "";
+  if (typeof data === "string") return data.trim().slice(0, 400);
+  if (typeof data === "object" && data !== null) {
+    const d = data as Record<string, unknown>;
+    const err = typeof d.error === "string" ? d.error : "";
+    const desc = typeof d.error_description === "string" ? d.error_description : "";
+    if (err || desc) return `${err}${err && desc ? " — " : ""}${desc}`.trim().slice(0, 400);
+  }
+  try {
+    return JSON.stringify(data).slice(0, 400);
+  } catch {
+    return "";
+  }
+}
+
+async function fetchApplicationAccessTokenBestEffort(params: {
   clientId: string;
   clientSecret: string;
-}): Promise<{ access_token: string; expires_in: number } | null> {
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
-    scope: BUY_APPLICATION_SCOPE,
-  });
-
+}): Promise<
+  | { ok: true; access_token: string; expires_in: number }
+  | { ok: false; httpStatus: number; errorSummary: string }
+> {
   const basic = Buffer.from(`${params.clientId}:${params.clientSecret}`).toString("base64");
+  let lastStatus = 0;
+  let lastSummary = "";
 
-  const resp = await axios.post("https://api.ebay.com/identity/v1/oauth2/token", body.toString(), {
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${basic}`,
-    },
-    timeout: 15000,
-    validateStatus: () => true,
-  });
-
-  if (resp.status !== 200) {
-    logger.warn(
-      { status: resp.status, data: resp.data },
-      "eBay OAuth client_credentials (Browse/Buy) failed",
-    );
-    return null;
+  for (const scope of BUY_CLIENT_CRED_SCOPE_CANDIDATES) {
+    const body = new URLSearchParams({
+      grant_type: "client_credentials",
+      scope,
+    });
+    const resp = await axios.post("https://api.ebay.com/identity/v1/oauth2/token", body.toString(), {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${basic}`,
+      },
+      timeout: 15000,
+      validateStatus: () => true,
+    });
+    lastStatus = resp.status;
+    if (resp.status === 200 && resp.data?.access_token) {
+      return {
+        ok: true,
+        access_token: resp.data.access_token,
+        expires_in: Number(resp.data.expires_in) || 7200,
+      };
+    }
+    const msg = summarizeOAuthIdentityError(resp.data);
+    lastSummary = msg || `HTTP ${resp.status}`;
+    logger.warn({ status: resp.status, scope, data: resp.data }, "eBay OAuth client_credentials attempt failed");
   }
 
-  return resp.data as { access_token: string; expires_in: number };
+  return { ok: false, httpStatus: lastStatus, errorSummary: lastSummary || "client_credentials failed" };
 }
 
 export type EbayBuyAuthMethod = "oauth_user_refresh" | "client_credentials" | null;
+
+export type BuyApiClientCredentialsAttempt = {
+  attempted: boolean;
+  httpStatus: number | null;
+  errorJa: string | null;
+};
 
 /**
  * Token for Buy Browse API: prefer user refresh token when present, else App ID + OAuth Client Secret (client credentials).
@@ -169,10 +206,17 @@ export type EbayBuyAuthMethod = "oauth_user_refresh" | "client_credentials" | nu
 export async function getBuyApiAccessTokenFromDb(): Promise<{
   token: string | null;
   authMethod: EbayBuyAuthMethod;
+  clientCredentialsAttempt: BuyApiClientCredentialsAttempt;
 }> {
+  const noneAttempt: BuyApiClientCredentialsAttempt = {
+    attempted: false,
+    httpStatus: null,
+    errorJa: null,
+  };
+
   const userTok = await getValidEbayUserAccessTokenFromDb();
   if (userTok) {
-    return { token: userTok, authMethod: "oauth_user_refresh" };
+    return { token: userTok, authMethod: "oauth_user_refresh", clientCredentialsAttempt: noneAttempt };
   }
 
   const [config] = await db.select().from(spreadsheetConfigTable).limit(1);
@@ -189,13 +233,29 @@ export async function getBuyApiAccessTokenFromDb(): Promise<{
     "";
 
   if (!clientId || !clientSecret) {
-    return { token: null, authMethod: null };
+    return { token: null, authMethod: null, clientCredentialsAttempt: noneAttempt };
   }
 
-  const appTok = await fetchApplicationAccessToken({ clientId, clientSecret });
-  if (appTok?.access_token) {
-    return { token: appTok.access_token, authMethod: "client_credentials" };
+  const appTok = await fetchApplicationAccessTokenBestEffort({ clientId, clientSecret });
+  if (appTok.ok) {
+    return {
+      token: appTok.access_token,
+      authMethod: "client_credentials",
+      clientCredentialsAttempt: {
+        attempted: true,
+        httpStatus: 200,
+        errorJa: null,
+      },
+    };
   }
 
-  return { token: null, authMethod: null };
+  return {
+    token: null,
+    authMethod: null,
+    clientCredentialsAttempt: {
+      attempted: true,
+      httpStatus: appTok.httpStatus,
+      errorJa: appTok.errorSummary,
+    },
+  };
 }

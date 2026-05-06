@@ -609,6 +609,17 @@ components:
         buyApiAuth:
           type: string
           enum: [oauth_user_refresh, client_credentials, none]
+        oauthClientCredAttempted:
+          type: boolean
+          description: OAuth client_credentials を試行したか
+        oauthClientCredHttpStatus:
+          type: integer
+          nullable: true
+          description: 最終試行の HTTP ステータス（成功時は 200）
+        oauthClientCredErrorJa:
+          type: string
+          nullable: true
+          description: eBay が返した OAuth エラー要約（日本語混入の可能性あり）
         browseGetItemHttpStatus:
           type: integer
           nullable: true
