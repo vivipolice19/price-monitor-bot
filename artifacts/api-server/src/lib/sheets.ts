@@ -430,7 +430,12 @@ export async function hydrateUnknownMonitorConditions(limit = 25): Promise<numbe
 
   let n = 0;
   for (const m of rows) {
-    const cond = await fetchListingCondition(m.ebayUrl, appId);
+    const cond = await fetchListingCondition(m.ebayUrl, appId, {
+      appId: config?.ebayAppId,
+      devId: config?.ebayDevId,
+      certId: config?.ebayCertId,
+      userToken: config?.ebayUserToken,
+    });
     if (cond && cond !== "Unknown") {
       await db.update(monitorsTable).set({ myCondition: cond }).where(eq(monitorsTable.id, m.id));
       n++;

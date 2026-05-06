@@ -35,6 +35,18 @@ type TradingCreds = {
   userToken?: string | null;
 };
 
+function isUsableEbayItem(item: EbayItem | null | undefined): boolean {
+  return Boolean(item && (item.totalPrice ?? 0) > 0);
+}
+
+function pickBetterItem(a: EbayItem | null, b: EbayItem | null): EbayItem | null {
+  if (isUsableEbayItem(b) && !isUsableEbayItem(a)) return b;
+  if (isUsableEbayItem(a) && !isUsableEbayItem(b)) return a;
+  if (!a) return b;
+  if (!b) return a;
+  return (b.totalPrice ?? 0) > (a.totalPrice ?? 0) ? b : a;
+}
+
 function normalizeConditionFromBrowse(value: string | undefined): string {
   const v = (value ?? "").toUpperCase();
   if (v === "NEW") return "New";
@@ -368,7 +380,15 @@ async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Prom
         sortOrder: "BestMatch",
       },
       timeout: 10000,
+      validateStatus: () => true,
     });
+    if (resp.status !== 200) {
+      logger.warn(
+        { itemId, status: resp.status, data: resp.data },
+        "eBay Finding API HTTP error for itemId lookup",
+      );
+      return null;
+    }
     const top = resp.data?.findItemsAdvancedResponse?.[0];
     const ack = String(top?.ack?.[0] ?? "").toLowerCase();
     if (ack && ack !== "success" && ack !== "warning") {
@@ -594,7 +614,16 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
         sortOrder: "PricePlusShippingLowest",
       },
       timeout: 10000,
+      validateStatus: () => true,
     });
+
+    if (resp.status !== 200) {
+      logger.warn(
+        { status: resp.status, keywords, data: resp.data },
+        "eBay Finding API HTTP error for title search",
+      );
+      return [];
+    }
 
     const searchResult = resp.data?.findItemsAdvancedResponse?.[0];
     const ack = String(searchResult?.ack?.[0] ?? "").toLowerCase();
@@ -631,7 +660,11 @@ async function fetchPriceHintByFinding(itemId: string, appId: string): Promise<n
         sortOrder: "BestMatch",
       },
       timeout: 10000,
+      validateStatus: () => true,
     });
+    if (resp.status !== 200) {
+      return null;
+    }
     const items = resp.data?.findItemsAdvancedResponse?.[0]?.searchResult?.[0]?.item || [];
     const same = items.find((it: any) => {
       const url = String(it?.viewItemURL?.[0] ?? "");
@@ -729,19 +762,34 @@ async function enrichItemsWithShoppingApi(items: EbayItem[], appId: string, conc
   }
 }
 
-export async function fetchListingCondition(ebayUrl: string, appId?: string | null): Promise<string> {
+export async function fetchListingCondition(
+  ebayUrl: string,
+  appId?: string | null,
+  tradingCreds?: TradingCreds,
+): Promise<string> {
   const resolved = appId ?? process.env.EBAY_APP_ID ?? "";
   const itemId = extractItemIdFromUrl(ebayUrl);
   const accessToken = await getValidEbayUserAccessTokenFromDb();
   if (itemId && accessToken) {
     const viaBrowse = await fetchEbayItemByBrowseApi(itemId, accessToken);
-    if (viaBrowse?.condition) return viaBrowse.condition;
+    if (viaBrowse?.condition && viaBrowse.condition !== "Unknown") return viaBrowse.condition;
   }
   if (itemId && resolved) {
     const item = await fetchEbayItemByApi(itemId, resolved);
-    if (item?.condition) return item.condition;
+    if (item?.condition && item.condition !== "Unknown") return item.condition;
+  }
+  if (itemId) {
+    const viaTrading = await fetchEbayItemByTradingApi(itemId, {
+      appId: tradingCreds?.appId ?? resolved,
+      devId: tradingCreds?.devId,
+      certId: tradingCreds?.certId,
+      userToken: tradingCreds?.userToken,
+    });
+    if (viaTrading?.condition && viaTrading.condition !== "Unknown") return viaTrading.condition;
+  }
+  if (itemId && resolved) {
     const viaFinding = await fetchEbayItemByFindingItemId(itemId, resolved);
-    if (viaFinding?.condition) return viaFinding.condition;
+    if (viaFinding?.condition && viaFinding.condition !== "Unknown") return viaFinding.condition;
   }
   return "Unknown";
 }
@@ -760,26 +808,30 @@ export async function researchEbayItem(
   const accessToken = await getValidEbayUserAccessTokenFromDb();
 
   let originalItem: EbayItem | null = null;
+  const tradingCreds: TradingCreds = {
+    appId: options?.appId,
+    devId: options?.devId,
+    certId: options?.certId,
+    userToken: options?.userToken,
+  };
 
   if (itemId && accessToken) {
-    originalItem = await fetchEbayItemByBrowseApi(itemId, accessToken);
+    originalItem = pickBetterItem(originalItem, await fetchEbayItemByBrowseApi(itemId, accessToken));
   }
 
-  if (!originalItem && itemId && appId) {
-    originalItem = await fetchEbayItemByApi(itemId, appId);
+  if (itemId && appId) {
+    originalItem = pickBetterItem(originalItem, await fetchEbayItemByApi(itemId, appId));
   }
 
-  if (!originalItem && itemId) {
-    originalItem = await fetchEbayItemByTradingApi(itemId, {
-      appId: options?.appId,
-      devId: options?.devId,
-      certId: options?.certId,
-      userToken: options?.userToken,
-    });
+  if (itemId && (!isUsableEbayItem(originalItem) || !originalItem?.title?.trim())) {
+    originalItem = pickBetterItem(
+      originalItem,
+      await fetchEbayItemByTradingApi(itemId, tradingCreds),
+    );
   }
 
-  if (!originalItem && itemId && appId) {
-    originalItem = await fetchEbayItemByFindingItemId(itemId, appId);
+  if (itemId && appId && (!isUsableEbayItem(originalItem) || !originalItem?.title?.trim())) {
+    originalItem = pickBetterItem(originalItem, await fetchEbayItemByFindingItemId(itemId, appId));
   }
 
   if (!originalItem) {
