@@ -94,13 +94,13 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   const updates = [
     { col: config.lowestPriceColumnIndex ?? 8, title: "最安値(同一商品)" },
     { col: config.lowestConditionColumnIndex ?? 9, title: "最安値コンディション" },
-    { col: config.lastCheckColumnIndex ?? 10, title: "最終チェック" },
-    { col: config.alertStatusColumnIndex ?? 11, title: "アラート状態" },
-    { col: config.repricedValueColumnIndex ?? 12, title: "自動改定価格" },
-    { col: config.evidenceUrlsColumnIndex ?? 13, title: "リサーチ根拠URL" },
-    { col: config.trackedTargetUrlColumnIndex ?? 14, title: "追跡対象URL" },
-    { col: config.trackedTargetConditionColumnIndex ?? 15, title: "追跡対象コンディション" },
-    { col: config.trackedTargetPriceColumnIndex ?? 16, title: "追跡対象価格(USD)" },
+    { col: config.lastCheckColumnIndex ?? 7, title: "最終チェック" },
+    { col: config.alertStatusColumnIndex ?? 10, title: "アラート状態" },
+    { col: config.repricedValueColumnIndex ?? 11, title: "自動改定価格" },
+    { col: config.evidenceUrlsColumnIndex ?? 12, title: "リサーチ根拠URL" },
+    { col: config.trackedTargetUrlColumnIndex ?? 13, title: "追跡対象URL" },
+    { col: config.trackedTargetConditionColumnIndex ?? 14, title: "追跡対象コンディション" },
+    { col: config.trackedTargetPriceColumnIndex ?? 15, title: "追跡対象価格(USD)" },
   ];
 
   await sheets.spreadsheets.values.batchUpdate({
@@ -138,13 +138,13 @@ export async function appendMonitorRowToSpreadsheet(params: {
   const extraCols = [
     config.lowestPriceColumnIndex ?? 8,
     config.lowestConditionColumnIndex ?? 9,
-    config.lastCheckColumnIndex ?? 10,
-    config.alertStatusColumnIndex ?? 11,
-    config.repricedValueColumnIndex ?? 12,
-    config.evidenceUrlsColumnIndex ?? 13,
-    config.trackedTargetUrlColumnIndex ?? 14,
-    config.trackedTargetConditionColumnIndex ?? 15,
-    config.trackedTargetPriceColumnIndex ?? 16,
+    config.lastCheckColumnIndex ?? 7,
+    config.alertStatusColumnIndex ?? 10,
+    config.repricedValueColumnIndex ?? 11,
+    config.evidenceUrlsColumnIndex ?? 12,
+    config.trackedTargetUrlColumnIndex ?? 13,
+    config.trackedTargetConditionColumnIndex ?? 14,
+    config.trackedTargetPriceColumnIndex ?? 15,
   ];
 
   const all = [sourceCol, ebayCol, myPriceCol, statusCol, ...extraCols];
@@ -161,9 +161,9 @@ export async function appendMonitorRowToSpreadsheet(params: {
   }
 
   // Tracked-target columns (monitoring columns) are useful even before the first check runs.
-  const trackedTargetUrlIndex = config.trackedTargetUrlColumnIndex ?? 14;
-  const trackedTargetConditionIndex = config.trackedTargetConditionColumnIndex ?? 15;
-  const trackedTargetPriceIndex = config.trackedTargetPriceColumnIndex ?? 16;
+  const trackedTargetUrlIndex = config.trackedTargetUrlColumnIndex ?? 13;
+  const trackedTargetConditionIndex = config.trackedTargetConditionColumnIndex ?? 14;
+  const trackedTargetPriceIndex = config.trackedTargetPriceColumnIndex ?? 15;
   row[trackedTargetUrlIndex] = params.ebayUrl;
   row[trackedTargetConditionIndex] = params.myCondition ? String(params.myCondition) : "";
   row[trackedTargetPriceIndex] = params.myPrice;
@@ -595,13 +595,13 @@ export async function updateMonitorRowStatus(params: {
 
   const lowestPriceCol = columnIndexToLetter(config.lowestPriceColumnIndex ?? 8);
   const lowestConditionCol = columnIndexToLetter(config.lowestConditionColumnIndex ?? 9);
-  const lastCheckCol = columnIndexToLetter(config.lastCheckColumnIndex ?? 10);
-  const alertStatusCol = columnIndexToLetter(config.alertStatusColumnIndex ?? 11);
-  const repricedCol = columnIndexToLetter(config.repricedValueColumnIndex ?? 12);
-  const evidenceCol = columnIndexToLetter(config.evidenceUrlsColumnIndex ?? 13);
-  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 14);
-  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 15);
-  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 16);
+  const lastCheckCol = columnIndexToLetter(config.lastCheckColumnIndex ?? 7);
+  const alertStatusCol = columnIndexToLetter(config.alertStatusColumnIndex ?? 10);
+  const repricedCol = columnIndexToLetter(config.repricedValueColumnIndex ?? 11);
+  const evidenceCol = columnIndexToLetter(config.evidenceUrlsColumnIndex ?? 12);
+  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 13);
+  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 14);
+  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 15);
 
   const evidence = (params.evidenceUrls ?? []).slice(0, 5).join("\n");
 
@@ -635,9 +635,9 @@ export async function updateTrackedTargetCells(params: {
   const { sheets, config } = result;
   if (!config.spreadsheetId || !config.sheetName) return;
 
-  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 14);
-  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 15);
-  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 16);
+  const trackedTargetUrlCol = columnIndexToLetter(config.trackedTargetUrlColumnIndex ?? 13);
+  const trackedTargetConditionCol = columnIndexToLetter(config.trackedTargetConditionColumnIndex ?? 14);
+  const trackedTargetPriceCol = columnIndexToLetter(config.trackedTargetPriceColumnIndex ?? 15);
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
@@ -676,8 +676,8 @@ export async function syncAlertsToSpreadsheet(): Promise<{ synced: number; faile
   let synced = 0;
   let failed = 0;
 
-  const alertColLetter = columnIndexToLetter(config.alertColumnIndex ?? 10);
-  const priceColLetter = columnIndexToLetter(config.priceColumnIndex ?? 11);
+  const alertColLetter = columnIndexToLetter(config.alertColumnIndex ?? 6);
+  const priceColLetter = columnIndexToLetter(config.priceColumnIndex ?? 8);
 
   for (const { alert, monitor } of unsyncedAlerts) {
     if (!monitor.spreadsheetRow) {
