@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { monitorsTable, priceHistoryTable, alertsTable, spreadsheetConfigTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { researchEbayItem } from "../lib/ebay";
-import { appendMonitorRowToSpreadsheet, syncAlertsToSpreadsheet, updateMonitorRowStatus } from "../lib/sheets";
+import { appendMonitorRowToSpreadsheet, clearMonitorCells, syncAlertsToSpreadsheet, updateMonitorRowStatus } from "../lib/sheets";
 import { reviseEbayListingPrice } from "../lib/repricing";
 import { getValidEbayUserAccessTokenFromDb } from "../lib/ebayOAuth";
 
@@ -181,6 +181,14 @@ router.delete("/monitors/:id", async (req, res) => {
   }
 
   try {
+    const [target] = await db.select().from(monitorsTable).where(eq(monitorsTable.id, id)).limit(1);
+    if (target?.spreadsheetRow) {
+      try {
+        await clearMonitorCells(target.spreadsheetRow);
+      } catch (err) {
+        req.log.warn({ err, monitorId: id, row: target.spreadsheetRow }, "clearMonitorCells failed");
+      }
+    }
     await db.delete(monitorsTable).where(eq(monitorsTable.id, id));
     res.status(204).send();
   } catch (err) {

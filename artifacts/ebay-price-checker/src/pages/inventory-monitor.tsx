@@ -77,7 +77,18 @@ export function InventoryMonitorPage() {
           setResearch(data);
           const inv = data.inventoryProduct;
           const u = inv.ebay_url?.trim() ?? "";
-          setSeedUrl(u);
+          const ownBase = u.split("?")[0] ?? u;
+          const candidates = (data.allItems ?? []).filter((it) => {
+            const base = String(it.url ?? "").split("?")[0] ?? "";
+            return base.length > 0 && base !== ownBase;
+          });
+          const best =
+            candidates
+              .filter((it) => (it.totalPrice ?? 0) > 0)
+              .sort((a, b) => (a.totalPrice ?? 0) - (b.totalPrice ?? 0))[0]?.url ??
+            data.originalItem?.url ??
+            u;
+          setSeedUrl(best);
           setMyPriceInput(String(inv.ebay_price_usd ?? ""));
           const c = data.originalItem?.condition;
           if (c) setMyCondition(c);
@@ -247,8 +258,20 @@ export function InventoryMonitorPage() {
                       <Badge variant={p.status === "active" ? "default" : "secondary"}>{p.status}</Badge>
                     </TableCell>
                     <TableCell className="tabular-nums">${Number(p.ebay_price_usd).toFixed(2)}</TableCell>
-                    <TableCell className="max-w-[220px] truncate text-xs font-mono" title={p.ebay_url}>
-                      {p.ebay_url || "—"}
+                    <TableCell className="max-w-[260px] truncate text-xs font-mono" title={p.ebay_url}>
+                      {p.ebay_url ? (
+                        <a
+                          href={p.ebay_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                        >
+                          {p.ebay_url}
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell>
                       {p.monitorId != null ? (

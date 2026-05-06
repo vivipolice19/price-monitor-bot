@@ -654,6 +654,41 @@ export async function updateTrackedTargetCells(params: {
   });
 }
 
+export async function clearMonitorCells(row: number): Promise<void> {
+  const result = await getSheets();
+  if (!result) return;
+  const { sheets, config } = result;
+  if (!config.spreadsheetId || !config.sheetName) return;
+
+  const lowestPriceCol = columnIndexToLetter(MONITOR_COLS.lowestPrice);
+  const lowestConditionCol = columnIndexToLetter(MONITOR_COLS.lowestCondition);
+  const lastCheckCol = columnIndexToLetter(MONITOR_COLS.lastCheck);
+  const alertStatusCol = columnIndexToLetter(MONITOR_COLS.alertStatus);
+  const repricedCol = columnIndexToLetter(MONITOR_COLS.repricedValue);
+  const evidenceCol = columnIndexToLetter(MONITOR_COLS.evidenceUrls);
+  const trackedTargetUrlCol = columnIndexToLetter(MONITOR_COLS.trackedTargetUrl);
+  const trackedTargetConditionCol = columnIndexToLetter(MONITOR_COLS.trackedTargetCondition);
+  const trackedTargetPriceCol = columnIndexToLetter(MONITOR_COLS.trackedTargetPrice);
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: config.spreadsheetId,
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data: [
+        { range: `${config.sheetName}!${lowestPriceCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${lowestConditionCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${lastCheckCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${alertStatusCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${repricedCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${evidenceCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${trackedTargetUrlCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${trackedTargetConditionCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${trackedTargetPriceCol}${row}`, values: [[""]] },
+      ],
+    },
+  });
+}
+
 export async function syncAlertsToSpreadsheet(): Promise<{ synced: number; failed: number }> {
   const result = await getSheets();
   if (!result) return { synced: 0, failed: 0 };

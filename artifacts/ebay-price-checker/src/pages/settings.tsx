@@ -473,7 +473,7 @@ export function Settings() {
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
                     <p className="col-span-full text-xs text-muted-foreground leading-relaxed">
-                      「列」の数字は左から<strong>0=A列</strong>です。入力すると右の説明文が現在の対応を示します。
+                      「列」の数字は左から<strong>0=A列</strong>です（例: 1=B列, 8=I列）。入力すると右の説明文が現在の対応を示します。
                     </p>
                     <div className="col-span-full">
                       <Button
