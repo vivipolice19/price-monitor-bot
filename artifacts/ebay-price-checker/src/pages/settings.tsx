@@ -81,15 +81,15 @@ export function Settings() {
     defaultValues: {
       spreadsheetId: "",
       sheetName: "",
-      alertColumnIndex: 6,
+      alertColumnIndex: 11,
       priceColumnIndex: 8,
       myPriceColumnIndex: 3,
       sourceUrlColumnIndex: 0,
       ebayUrlColumnIndex: 1,
       inventoryStatusColumnIndex: 5,
-      trackedTargetUrlColumnIndex: 13,
-      trackedTargetConditionColumnIndex: 14,
-      trackedTargetPriceColumnIndex: 15,
+      trackedTargetUrlColumnIndex: 14,
+      trackedTargetConditionColumnIndex: 15,
+      trackedTargetPriceColumnIndex: 16,
       ebayListingConditionColumnIndex: "",
       inventoryCheckerBaseUrl: "https://ebay-lowest-checker-1.onrender.com",
       inventoryCheckerApiKey: "",
@@ -122,7 +122,7 @@ export function Settings() {
   });
   const w = Array.isArray(watchedCols)
     ? watchedCols.map((x) => Number(x) || 0)
-    : [0, 1, 5, 14, 15, 16, 3, 6, 5];
+    : [0, 1, 5, 14, 15, 16, 3, 8, 11];
   const condColWatch = useWatch({
     control: sheetForm.control,
     name: "ebayListingConditionColumnIndex",
@@ -133,15 +133,15 @@ export function Settings() {
       sheetForm.reset({
         spreadsheetId: config.spreadsheetId || "",
         sheetName: config.sheetName || "",
-        alertColumnIndex: config.alertColumnIndex ?? 6,
+        alertColumnIndex: config.alertColumnIndex ?? 11,
         priceColumnIndex: config.priceColumnIndex ?? 8,
         myPriceColumnIndex: config.myPriceColumnIndex ?? 3,
         sourceUrlColumnIndex: config.sourceUrlColumnIndex ?? 0,
         ebayUrlColumnIndex: config.ebayUrlColumnIndex ?? 1,
         inventoryStatusColumnIndex: config.inventoryStatusColumnIndex ?? 5,
-        trackedTargetUrlColumnIndex: config.trackedTargetUrlColumnIndex ?? 13,
-        trackedTargetConditionColumnIndex: config.trackedTargetConditionColumnIndex ?? 14,
-        trackedTargetPriceColumnIndex: config.trackedTargetPriceColumnIndex ?? 15,
+        trackedTargetUrlColumnIndex: config.trackedTargetUrlColumnIndex ?? 14,
+        trackedTargetConditionColumnIndex: config.trackedTargetConditionColumnIndex ?? 15,
+        trackedTargetPriceColumnIndex: config.trackedTargetPriceColumnIndex ?? 16,
         ebayListingConditionColumnIndex:
           config.ebayListingConditionColumnIndex != null
             ? String(config.ebayListingConditionColumnIndex)

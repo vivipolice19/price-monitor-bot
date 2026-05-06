@@ -219,7 +219,7 @@ router.post("/monitors", async (req, res) => {
           myCondition,
           label: label ?? product.mercari_url ?? m.label,
           spreadsheetRow: spreadsheetRow ?? m.spreadsheetRow,
-          checkIntervalMinutes: checkIntervalMinutes ?? m.checkIntervalMinutes ?? 360,
+          checkIntervalMinutes: checkIntervalMinutes ?? m.checkIntervalMinutes ?? 1440,
           isActive: product.status === "active",
         })
         .where(eq(monitorsTable.id, m.id))
@@ -267,7 +267,7 @@ router.post("/monitors", async (req, res) => {
         label: label || product.mercari_url || url,
         spreadsheetRow: spreadsheetRow ?? null,
         inventoryProductId: pid,
-        checkIntervalMinutes: checkIntervalMinutes || 360,
+        checkIntervalMinutes: checkIntervalMinutes || 1440,
         isActive: product.status === "active",
       })
       .returning();

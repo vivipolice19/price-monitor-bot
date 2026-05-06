@@ -25,7 +25,7 @@ export function startScheduler(performPriceCheck: (id: number) => Promise<any>) 
       for (const monitor of monitors) {
         try {
           const lastChecked = monitor.lastCheckedAt;
-          const intervalMs = (monitor.checkIntervalMinutes ?? 360) * 60 * 1000;
+          const intervalMs = (monitor.checkIntervalMinutes ?? 1440) * 60 * 1000;
 
           if (lastChecked && (now.getTime() - lastChecked.getTime()) < intervalMs) {
             continue;
@@ -42,5 +42,5 @@ export function startScheduler(performPriceCheck: (id: number) => Promise<any>) 
     }
   });
 
-  logger.info("Price monitor scheduler started (hourly, checks every 6 hours per item)");
+  logger.info("Price monitor scheduler started (hourly, checks every 24 hours per item by default)");
 }

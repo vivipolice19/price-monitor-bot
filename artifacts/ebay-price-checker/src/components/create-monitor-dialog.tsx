@@ -18,7 +18,7 @@ const formSchema = z.object({
   myCondition: z.string().min(1, "コンディションを入力してください"),
   label: z.string().optional(),
   spreadsheetRow: z.coerce.number().optional(),
-  checkIntervalMinutes: z.coerce.number().min(5, "最短5分です").default(60),
+  checkIntervalMinutes: z.coerce.number().min(5, "最短5分です").default(1440),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -45,7 +45,7 @@ export function CreateMonitorDialog({ open, onOpenChange, defaultValues }: Creat
       myCondition: defaultValues?.myCondition || "New",
       label: defaultValues?.label || "",
       spreadsheetRow: defaultValues?.spreadsheetRow,
-      checkIntervalMinutes: 60,
+      checkIntervalMinutes: 1440,
     },
   });
 

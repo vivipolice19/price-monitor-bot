@@ -59,7 +59,7 @@ router.post("/monitors", async (req, res) => {
       myCondition,
       label: label || null,
       spreadsheetRow: spreadsheetRow || null,
-      checkIntervalMinutes: checkIntervalMinutes || 360,
+      checkIntervalMinutes: checkIntervalMinutes || 1440,
       isActive: true,
     }).returning();
 
