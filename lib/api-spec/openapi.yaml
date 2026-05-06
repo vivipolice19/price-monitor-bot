@@ -599,6 +599,45 @@ components:
         - url
         - totalPrice
 
+    ResearchDiagnostics:
+      type: object
+      description: どの eBay API が成功／失敗したか（リサーチ自体は実行済み）
+      properties:
+        itemId:
+          type: string
+          nullable: true
+        buyApiAuth:
+          type: string
+          enum: [oauth_user_refresh, client_credentials, none]
+        browseGetItemHttpStatus:
+          type: integer
+          nullable: true
+        shoppingHadPositivePrice:
+          type: boolean
+        tradingAck:
+          type: string
+          nullable: true
+        tradingErrorJa:
+          type: string
+          nullable: true
+        findingItemLookupHttpStatus:
+          type: integer
+          nullable: true
+        browseSearchHttpStatus:
+          type: integer
+          nullable: true
+        findingSearchHttpStatus:
+          type: integer
+          nullable: true
+        competitorBrowseCount:
+          type: integer
+        competitorFindingCount:
+          type: integer
+        hintsJa:
+          type: array
+          items:
+            type: string
+
     ResearchResult:
       type: object
       properties:
@@ -616,6 +655,8 @@ components:
           type: array
           items:
             type: string
+        diagnostics:
+          $ref: "#/components/schemas/ResearchDiagnostics"
         searchedAt:
           type: string
           format: date-time
@@ -624,6 +665,7 @@ components:
         - lowestByCondition
         - allItems
         - evidenceUrls
+        - diagnostics
         - searchedAt
 
     InventoryResearchRequest:

@@ -84,7 +84,7 @@ export function Research() {
       <div>
         <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">価格リサーチ</h1>
         <p className="text-muted-foreground mt-2 text-sm md:text-base leading-relaxed">
-          調べたい商品の <strong>eBay 出品 URL</strong> を入れて「分析する」を押すだけです。シート連携を使う場合だけ、行番号と自分の価格を入力します（任意）。
+          調べたい商品の <strong>eBay 出品 URL</strong> を入れて「分析する」を押すだけです。競合検索に <strong>Browse API</strong> を使う場合は、設定で <strong>eBay App ID</strong> と <strong>OAuth Client Secret</strong>（在庫管理アプリのクライアント秘密と同じ種類）を保存してください。シート連携を使う場合だけ、行番号と自分の価格を入力します（任意）。
         </p>
       </div>
 
@@ -175,6 +175,39 @@ export function Research() {
 
       {result && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {result.diagnostics?.hintsJa?.length ? (
+            <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm text-foreground/90">
+              <p className="font-semibold text-amber-900 dark:text-amber-100 mb-2">
+                接続状況（リサーチは実行済みです）
+              </p>
+              <ul className="list-disc pl-5 space-y-1.5 leading-relaxed">
+                {result.diagnostics.hintsJa.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+              <details className="mt-3 text-xs text-muted-foreground">
+                <summary className="cursor-pointer font-medium text-foreground/80">技術メモを表示</summary>
+                <pre className="mt-2 p-3 rounded-md bg-muted/50 overflow-x-auto whitespace-pre-wrap break-all">
+                  {JSON.stringify(
+                    {
+                      buyApiAuth: result.diagnostics.buyApiAuth,
+                      browseGetItemHttpStatus: result.diagnostics.browseGetItemHttpStatus,
+                      shoppingHadPositivePrice: result.diagnostics.shoppingHadPositivePrice,
+                      tradingAck: result.diagnostics.tradingAck,
+                      findingItemLookupHttpStatus: result.diagnostics.findingItemLookupHttpStatus,
+                      browseSearchHttpStatus: result.diagnostics.browseSearchHttpStatus,
+                      findingSearchHttpStatus: result.diagnostics.findingSearchHttpStatus,
+                      competitorBrowseCount: result.diagnostics.competitorBrowseCount,
+                      competitorFindingCount: result.diagnostics.competitorFindingCount,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="lg:col-span-1 border-0 shadow-sm ring-1 ring-border/50 overflow-hidden flex flex-col">
               <div className="bg-sidebar p-4 border-b border-sidebar-border">

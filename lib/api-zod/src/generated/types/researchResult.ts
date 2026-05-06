@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { EbayItem } from "./ebayItem";
+import type { ResearchDiagnostics } from "./researchDiagnostics";
 import type { ResearchResultLowestByCondition } from "./researchResultLowestByCondition";
 
 export interface ResearchResult {
@@ -13,5 +14,6 @@ export interface ResearchResult {
   lowestByCondition: ResearchResultLowestByCondition;
   allItems: EbayItem[];
   evidenceUrls: string[];
+  diagnostics: ResearchDiagnostics;
   searchedAt: Date;
 }

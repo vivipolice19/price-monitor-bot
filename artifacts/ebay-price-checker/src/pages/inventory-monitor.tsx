@@ -307,6 +307,17 @@ export function InventoryMonitorPage() {
                 </div>
               </div>
 
+              {research.diagnostics?.hintsJa?.length ? (
+                <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-foreground/90">
+                  <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1.5">接続状況（リサーチは実行済み）</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    {research.diagnostics.hintsJa.map((line, i) => (
+                      <li key={i}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>自分の出品価格（USD）</Label>

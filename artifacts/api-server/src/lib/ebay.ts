@@ -1,7 +1,23 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { logger } from "./logger";
-import { getValidEbayUserAccessTokenFromDb } from "./ebayOAuth";
+import { getBuyApiAccessTokenFromDb } from "./ebayOAuth";
+
+/** API ごとの成否（画面・ログ用。リサーチは実行しているが eBay 側エラーの切り分けに使う） */
+export type EbayResearchDiagnostics = {
+  itemId: string | null;
+  buyApiAuth: "oauth_user_refresh" | "client_credentials" | "none";
+  browseGetItemHttpStatus: number | null;
+  shoppingHadPositivePrice: boolean;
+  tradingAck: string | null;
+  tradingErrorJa: string | null;
+  findingItemLookupHttpStatus: number | null;
+  browseSearchHttpStatus: number | null;
+  findingSearchHttpStatus: number | null;
+  competitorBrowseCount: number;
+  competitorFindingCount: number;
+  hintsJa: string[];
+};
 
 export interface ProductIdentifiers {
   upc: string[];
@@ -80,7 +96,10 @@ function toEbayItemFromBrowse(raw: any): EbayItem | null {
   };
 }
 
-async function fetchEbayItemByBrowseApi(itemId: string, accessToken: string): Promise<EbayItem | null> {
+async function browseGetItemByLegacyId(
+  itemId: string,
+  accessToken: string,
+): Promise<{ item: EbayItem | null; httpStatus: number }> {
   try {
     const resp = await axios.get("https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id", {
       params: { legacy_item_id: itemId },
@@ -92,19 +111,27 @@ async function fetchEbayItemByBrowseApi(itemId: string, accessToken: string): Pr
     });
     if (resp.status !== 200) {
       logger.warn({ itemId, status: resp.status, data: resp.data }, "Browse API get_item_by_legacy_id failed");
-      return null;
+      return { item: null, httpStatus: resp.status };
     }
-    return toEbayItemFromBrowse(resp.data);
+    return { item: toEbayItemFromBrowse(resp.data), httpStatus: resp.status };
   } catch (err) {
     logger.warn({ err, itemId }, "Browse API item fetch failed");
-    return null;
+    return { item: null, httpStatus: 0 };
   }
 }
 
-async function searchItemsByTitleBrowse(originalItem: EbayItem, accessToken: string): Promise<EbayItem[]> {
+async function fetchEbayItemByBrowseApi(itemId: string, accessToken: string): Promise<EbayItem | null> {
+  const { item } = await browseGetItemByLegacyId(itemId, accessToken);
+  return item;
+}
+
+async function searchItemsByTitleBrowseWithMeta(
+  originalItem: EbayItem,
+  accessToken: string,
+): Promise<{ items: EbayItem[]; httpStatus: number }> {
   try {
     const keywords = originalItem.title.split(" ").slice(0, 8).join(" ").trim();
-    if (!keywords) return [];
+    if (!keywords) return { items: [], httpStatus: 0 };
     const resp = await axios.get("https://api.ebay.com/buy/browse/v1/item_summary/search", {
       params: {
         q: keywords,
@@ -119,16 +146,22 @@ async function searchItemsByTitleBrowse(originalItem: EbayItem, accessToken: str
     });
     if (resp.status !== 200) {
       logger.warn({ status: resp.status, data: resp.data, keywords }, "Browse API search failed");
-      return [];
+      return { items: [], httpStatus: resp.status };
     }
-    const items = Array.isArray(resp.data?.itemSummaries) ? resp.data.itemSummaries : [];
-    return items
+    const rawItems = Array.isArray(resp.data?.itemSummaries) ? resp.data.itemSummaries : [];
+    const items = rawItems
       .map((it: any) => toEbayItemFromBrowse(it))
       .filter((it: EbayItem | null): it is EbayItem => Boolean(it));
+    return { items, httpStatus: resp.status };
   } catch (err) {
     logger.warn({ err }, "Browse API title search failed");
-    return [];
+    return { items: [], httpStatus: 0 };
   }
+}
+
+async function searchItemsByTitleBrowse(originalItem: EbayItem, accessToken: string): Promise<EbayItem[]> {
+  const { items } = await searchItemsByTitleBrowseWithMeta(originalItem, accessToken);
+  return items;
 }
 
 function toEbayItemFromFinding(item: any): EbayItem {
@@ -273,12 +306,22 @@ function xmlEscape(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-async function fetchEbayItemByTradingApi(itemId: string, creds: TradingCreds): Promise<EbayItem | null> {
+async function fetchEbayItemByTradingApiEx(
+  itemId: string,
+  creds: TradingCreds,
+): Promise<{
+  item: EbayItem | null;
+  ack: string | null;
+  shortMessage: string | null;
+  longMessage: string | null;
+}> {
   const appId = creds.appId ?? process.env.EBAY_APP_ID ?? "";
   const devId = creds.devId ?? process.env.EBAY_DEV_ID ?? "";
   const certId = creds.certId ?? process.env.EBAY_CERT_ID ?? "";
   const userToken = creds.userToken ?? process.env.EBAY_USER_TOKEN ?? "";
-  if (!appId || !devId || !certId || !userToken) return null;
+  if (!appId || !devId || !certId || !userToken) {
+    return { item: null, ack: null, shortMessage: null, longMessage: null };
+  }
 
   const body = `<?xml version="1.0" encoding="utf-8"?>
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -307,12 +350,11 @@ async function fetchEbayItemByTradingApi(itemId: string, creds: TradingCreds): P
     const raw = String(response.data ?? "");
     const $ = cheerio.load(raw, { xmlMode: true });
     const ack = $("Ack").first().text().trim();
+    const shortMessage = $("ShortMessage").first().text().trim() || null;
+    const longMessage = $("LongMessage").first().text().trim() || null;
     if (!(ack === "Success" || ack === "Warning")) {
-      logger.warn(
-        { itemId, ack, short: $("ShortMessage").first().text().trim(), long: $("LongMessage").first().text().trim() },
-        "eBay Trading GetItem failed",
-      );
-      return null;
+      logger.warn({ itemId, ack, short: shortMessage, long: longMessage }, "eBay Trading GetItem failed");
+      return { item: null, ack: ack || null, shortMessage, longMessage };
     }
     const title = $("Item > Title").first().text().trim();
     const price =
@@ -348,26 +390,39 @@ async function fetchEbayItemByTradingApi(itemId: string, creds: TradingCreds): P
     });
 
     return {
-      itemId,
-      title,
-      price,
-      currency,
-      condition,
-      seller,
-      url,
-      shippingCost: shipping,
-      totalPrice: price + shipping,
-      imageUrl,
-      location,
-      identifiers,
+      item: {
+        itemId,
+        title,
+        price,
+        currency,
+        condition,
+        seller,
+        url,
+        shippingCost: shipping,
+        totalPrice: price + shipping,
+        imageUrl,
+        location,
+        identifiers,
+      },
+      ack: ack || null,
+      shortMessage,
+      longMessage,
     };
   } catch (err) {
     logger.warn({ err, itemId }, "eBay Trading GetItem call failed");
-    return null;
+    return { item: null, ack: null, shortMessage: null, longMessage: null };
   }
 }
 
-async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Promise<EbayItem | null> {
+async function fetchEbayItemByTradingApi(itemId: string, creds: TradingCreds): Promise<EbayItem | null> {
+  const { item } = await fetchEbayItemByTradingApiEx(itemId, creds);
+  return item;
+}
+
+async function fetchEbayItemByFindingItemIdWithMeta(
+  itemId: string,
+  appId: string,
+): Promise<{ item: EbayItem | null; httpStatus: number }> {
   try {
     const resp = await axios.get("https://svcs.ebay.com/services/search/FindingService/v1", {
       params: {
@@ -387,7 +442,7 @@ async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Prom
         { itemId, status: resp.status, data: resp.data },
         "eBay Finding API HTTP error for itemId lookup",
       );
-      return null;
+      return { item: null, httpStatus: resp.status };
     }
     const top = resp.data?.findItemsAdvancedResponse?.[0];
     const ack = String(top?.ack?.[0] ?? "").toLowerCase();
@@ -400,10 +455,10 @@ async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Prom
         },
         "eBay Finding API returned failure for itemId lookup",
       );
-      return null;
+      return { item: null, httpStatus: resp.status };
     }
     const items = top?.searchResult?.[0]?.item || [];
-    if (!Array.isArray(items) || items.length === 0) return null;
+    if (!Array.isArray(items) || items.length === 0) return { item: null, httpStatus: resp.status };
     const picked =
       items.find((it: any) => {
         const url = String(it?.viewItemURL?.[0] ?? "");
@@ -411,11 +466,16 @@ async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Prom
         return id === itemId;
       }) ?? items[0];
     const parsed = toEbayItemFromFinding(picked);
-    return parsed.itemId ? parsed : null;
+    return { item: parsed.itemId ? parsed : null, httpStatus: resp.status };
   } catch (err) {
     logger.warn({ err, itemId }, "eBay Finding by itemId failed");
-    return null;
+    return { item: null, httpStatus: 0 };
   }
+}
+
+async function fetchEbayItemByFindingItemId(itemId: string, appId: string): Promise<EbayItem | null> {
+  const { item } = await fetchEbayItemByFindingItemIdWithMeta(itemId, appId);
+  return item;
 }
 
 async function scrapeEbayItem(url: string): Promise<EbayItem | null> {
@@ -584,15 +644,18 @@ function isSameItemStrict(original: EbayItem, candidate: EbayItem): boolean {
   return score >= 0.72;
 }
 
-async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefined): Promise<EbayItem[]> {
+async function searchItemsByTitleWithMeta(
+  originalItem: EbayItem,
+  appId: string | undefined,
+): Promise<{ items: EbayItem[]; httpStatus: number }> {
   if (!appId) {
-    return [];
+    return { items: [], httpStatus: 0 };
   }
 
   try {
     const titleKeywords = originalItem.title.split(" ").slice(0, 6).join(" ").trim();
     const keywords = titleKeywords || originalItem.itemId || "";
-    if (!keywords) return [];
+    if (!keywords) return { items: [], httpStatus: 0 };
 
     const resp = await axios.get("https://svcs.ebay.com/services/search/FindingService/v1", {
       params: {
@@ -622,7 +685,7 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
         { status: resp.status, keywords, data: resp.data },
         "eBay Finding API HTTP error for title search",
       );
-      return [];
+      return { items: [], httpStatus: resp.status };
     }
 
     const searchResult = resp.data?.findItemsAdvancedResponse?.[0];
@@ -636,15 +699,23 @@ async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefi
         },
         "eBay Finding API returned failure for title search",
       );
-      return [];
+      return { items: [], httpStatus: resp.status };
     }
     const items = searchResult?.searchResult?.[0]?.item || [];
 
-    return items.map((item: any): EbayItem => toEbayItemFromFinding(item));
+    return {
+      items: items.map((item: any): EbayItem => toEbayItemFromFinding(item)),
+      httpStatus: resp.status,
+    };
   } catch (err) {
     logger.warn({ err }, "eBay Finding API failed");
-    return [];
+    return { items: [], httpStatus: 0 };
   }
+}
+
+async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefined): Promise<EbayItem[]> {
+  const { items } = await searchItemsByTitleWithMeta(originalItem, appId);
+  return items;
 }
 
 async function fetchPriceHintByFinding(itemId: string, appId: string): Promise<number | null> {
@@ -769,7 +840,7 @@ export async function fetchListingCondition(
 ): Promise<string> {
   const resolved = appId ?? process.env.EBAY_APP_ID ?? "";
   const itemId = extractItemIdFromUrl(ebayUrl);
-  const accessToken = await getValidEbayUserAccessTokenFromDb();
+  const { token: accessToken } = await getBuyApiAccessTokenFromDb();
   if (itemId && accessToken) {
     const viaBrowse = await fetchEbayItemByBrowseApi(itemId, accessToken);
     if (viaBrowse?.condition && viaBrowse.condition !== "Unknown") return viaBrowse.condition;
@@ -802,10 +873,18 @@ export async function researchEbayItem(
   lowestByCondition: Record<string, EbayItem>;
   allItems: EbayItem[];
   evidenceUrls: string[];
+  diagnostics: EbayResearchDiagnostics;
 }> {
   const appId = options?.appId ?? process.env.EBAY_APP_ID ?? undefined;
   const itemId = extractItemIdFromUrl(url);
-  const accessToken = await getValidEbayUserAccessTokenFromDb();
+  const { token: accessToken, authMethod } = await getBuyApiAccessTokenFromDb();
+  const buyApiAuth =
+    authMethod === "oauth_user_refresh" || authMethod === "client_credentials" ? authMethod : "none";
+
+  let browseGetItemHttpStatus: number | null = null;
+  let findingItemLookupHttpStatus: number | null = null;
+  let tradingAck: string | null = null;
+  let tradingErrorJa: string | null = null;
 
   let originalItem: EbayItem | null = null;
   const tradingCreds: TradingCreds = {
@@ -816,26 +895,35 @@ export async function researchEbayItem(
   };
 
   if (itemId && accessToken) {
-    originalItem = pickBetterItem(originalItem, await fetchEbayItemByBrowseApi(itemId, accessToken));
+    const br = await browseGetItemByLegacyId(itemId, accessToken);
+    browseGetItemHttpStatus = br.httpStatus;
+    originalItem = pickBetterItem(originalItem, br.item);
   }
 
+  let shoppingHadPositivePrice = false;
   if (itemId && appId) {
-    originalItem = pickBetterItem(originalItem, await fetchEbayItemByApi(itemId, appId));
+    const shop = await fetchEbayItemByApi(itemId, appId);
+    if (shop && (shop.totalPrice ?? 0) > 0) shoppingHadPositivePrice = true;
+    originalItem = pickBetterItem(originalItem, shop);
   }
 
   if (itemId && (!isUsableEbayItem(originalItem) || !originalItem?.title?.trim())) {
-    originalItem = pickBetterItem(
-      originalItem,
-      await fetchEbayItemByTradingApi(itemId, tradingCreds),
-    );
+    const tr = await fetchEbayItemByTradingApiEx(itemId, tradingCreds);
+    tradingAck = tr.ack;
+    if (tr.shortMessage || tr.longMessage) {
+      tradingErrorJa = [tr.shortMessage, tr.longMessage].filter(Boolean).join(" — ") || null;
+    }
+    originalItem = pickBetterItem(originalItem, tr.item);
   }
 
   if (itemId && appId && (!isUsableEbayItem(originalItem) || !originalItem?.title?.trim())) {
-    originalItem = pickBetterItem(originalItem, await fetchEbayItemByFindingItemId(itemId, appId));
+    const fd = await fetchEbayItemByFindingItemIdWithMeta(itemId, appId);
+    findingItemLookupHttpStatus = fd.httpStatus;
+    originalItem = pickBetterItem(originalItem, fd.item);
   }
 
   if (!originalItem) {
-    throw new Error("eBay APIから商品情報を取得できませんでした。設定で eBay OAuth 連携（推奨）または AppID/DevID/CertID/UserToken を確認してください。");
+    throw new Error("eBay APIから商品情報を取得できませんでした。設定で eBay App ID + OAuth Client Secret（Browse・在庫アプリと同様）、または AppID/DevID/CertID/UserToken、もしくは OAuth 連携を確認してください。");
   }
 
   // If listing detail fetch succeeded but price is missing/0, try Finding API hint.
@@ -851,10 +939,18 @@ export async function researchEbayItem(
     throw new Error("商品価格を取得できませんでした（eBay側の取得制限またはAPI応答不足）。");
   }
 
-  const [browseItems, findingItems] = await Promise.all([
-    accessToken ? searchItemsByTitleBrowse(originalItem, accessToken) : Promise.resolve([]),
-    searchItemsByTitle(originalItem, appId),
-  ]);
+  const browseSearchP = accessToken
+    ? searchItemsByTitleBrowseWithMeta(originalItem, accessToken)
+    : Promise.resolve({ items: [] as EbayItem[], httpStatus: 0 });
+  const findingSearchP = searchItemsByTitleWithMeta(originalItem, appId);
+
+  const [browsePack, findingPack] = await Promise.all([browseSearchP, findingSearchP]);
+  const browseSearchHttpStatus = accessToken ? browsePack.httpStatus : null;
+  const findingSearchHttpStatus = findingPack.httpStatus;
+
+  const browseItems = browsePack.items;
+  const findingItems = findingPack.items;
+
   const dedupMap = new Map<string, EbayItem>();
   for (const item of [...browseItems, ...findingItems]) {
     if (!item.totalPrice || item.totalPrice <= 0) continue;
@@ -873,7 +969,6 @@ export async function researchEbayItem(
     return score >= 0.45;
   });
 
-  // Fallback: if no prelim matches, use broader title similarity.
   if (prelim.length === 0) {
     prelim = foundItems.filter((item) => {
       if (!item.totalPrice || item.totalPrice <= 0) return false;
@@ -890,7 +985,6 @@ export async function researchEbayItem(
   }
 
   let allItems = prelim.filter((item) => isSameItemStrict(originalItem!, item));
-  // Fallback: when strict filter removes everything, keep close title matches with valid price.
   if (allItems.length === 0) {
     allItems = prelim.filter((item) => {
       if (!item.totalPrice || item.totalPrice <= 0) return false;
@@ -901,7 +995,6 @@ export async function researchEbayItem(
       return score >= 0.28;
     });
   }
-  // Last fallback: return top priced candidates so UI doesn't become empty.
   if (allItems.length === 0) {
     allItems = foundItems
       .filter((item) => item.totalPrice > 0)
@@ -922,5 +1015,48 @@ export async function researchEbayItem(
     evidenceUrls.unshift(originalItem.url);
   }
 
-  return { originalItem, lowestByCondition, allItems, evidenceUrls: Array.from(new Set(evidenceUrls)) };
+  const hintsJa: string[] = [];
+  if (buyApiAuth === "none") {
+    hintsJa.push(
+      "Browse API 用トークンがありません。設定に「OAuth Client Secret」を保存すると在庫アプリと同じクライアント認証で検索できます。",
+    );
+  }
+  if (browseGetItemHttpStatus != null && browseGetItemHttpStatus !== 200) {
+    hintsJa.push(`Browse 商品取得が HTTP ${browseGetItemHttpStatus} で失敗しました。Client Secret・キー有効性を確認してください。`);
+  }
+  if (tradingAck && tradingAck !== "Success" && tradingAck !== "Warning") {
+    hintsJa.push(`Trading GetItem: ${tradingAck}${tradingErrorJa ? `（${tradingErrorJa}）` : ""}`);
+  }
+  if (findingItemLookupHttpStatus === 500 || findingSearchHttpStatus === 500) {
+    hintsJa.push("Finding API が HTTP 500 を返しています。eBay 開発者コンソールのキー権限・Finding の有効化を確認してください。");
+  }
+  if (findingSearchHttpStatus != null && findingSearchHttpStatus !== 200 && findingSearchHttpStatus !== 500) {
+    hintsJa.push(`Finding 検索が HTTP ${findingSearchHttpStatus} で失敗しました。`);
+  }
+  if (!accessToken && appId && findingItems.length === 0 && browseItems.length === 0) {
+    hintsJa.push("競合検索には Browse トークンか有効な Finding API が必要です。");
+  }
+
+  const diagnostics: EbayResearchDiagnostics = {
+    itemId,
+    buyApiAuth,
+    browseGetItemHttpStatus,
+    shoppingHadPositivePrice,
+    tradingAck,
+    tradingErrorJa,
+    findingItemLookupHttpStatus,
+    browseSearchHttpStatus,
+    findingSearchHttpStatus,
+    competitorBrowseCount: browseItems.length,
+    competitorFindingCount: findingItems.length,
+    hintsJa,
+  };
+
+  return {
+    originalItem,
+    lowestByCondition,
+    allItems,
+    evidenceUrls: Array.from(new Set(evidenceUrls)),
+    diagnostics,
+  };
 }

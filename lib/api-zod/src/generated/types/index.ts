@@ -28,6 +28,8 @@ export * from "./monitorFromInventoryResponse";
 export * from "./priceHistory";
 export * from "./productIdentifiers";
 export * from "./remoteInventorySyncResult";
+export * from "./researchDiagnostics";
+export * from "./researchDiagnosticsBuyApiAuth";
 export * from "./researchRequest";
 export * from "./researchResult";
 export * from "./researchResultLowestByCondition";

@@ -46,6 +46,33 @@ export interface EbayItem {
   identifiers?: ProductIdentifiers;
 }
 
+export type ResearchDiagnosticsBuyApiAuth =
+  (typeof ResearchDiagnosticsBuyApiAuth)[keyof typeof ResearchDiagnosticsBuyApiAuth];
+
+export const ResearchDiagnosticsBuyApiAuth = {
+  oauth_user_refresh: "oauth_user_refresh",
+  client_credentials: "client_credentials",
+  none: "none",
+} as const;
+
+/**
+ * どの eBay API が成功／失敗したか（リサーチ自体は実行済み）
+ */
+export interface ResearchDiagnostics {
+  itemId?: string | null;
+  buyApiAuth?: ResearchDiagnosticsBuyApiAuth;
+  browseGetItemHttpStatus?: number | null;
+  shoppingHadPositivePrice?: boolean;
+  tradingAck?: string | null;
+  tradingErrorJa?: string | null;
+  findingItemLookupHttpStatus?: number | null;
+  browseSearchHttpStatus?: number | null;
+  findingSearchHttpStatus?: number | null;
+  competitorBrowseCount?: number;
+  competitorFindingCount?: number;
+  hintsJa?: string[];
+}
+
 export type ResearchResultLowestByCondition = { [key: string]: EbayItem };
 
 export interface ResearchResult {
@@ -53,6 +80,7 @@ export interface ResearchResult {
   lowestByCondition: ResearchResultLowestByCondition;
   allItems: EbayItem[];
   evidenceUrls: string[];
+  diagnostics: ResearchDiagnostics;
   searchedAt: string;
 }
 

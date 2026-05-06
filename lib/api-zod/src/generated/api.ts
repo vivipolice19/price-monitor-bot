@@ -104,6 +104,24 @@ export const ResearchPriceResponse = zod.object({
     }),
   ),
   evidenceUrls: zod.array(zod.string()),
+  diagnostics: zod
+    .object({
+      itemId: zod.string().nullish(),
+      buyApiAuth: zod
+        .enum(["oauth_user_refresh", "client_credentials", "none"])
+        .optional(),
+      browseGetItemHttpStatus: zod.number().nullish(),
+      shoppingHadPositivePrice: zod.boolean().optional(),
+      tradingAck: zod.string().nullish(),
+      tradingErrorJa: zod.string().nullish(),
+      findingItemLookupHttpStatus: zod.number().nullish(),
+      browseSearchHttpStatus: zod.number().nullish(),
+      findingSearchHttpStatus: zod.number().nullish(),
+      competitorBrowseCount: zod.number().optional(),
+      competitorFindingCount: zod.number().optional(),
+      hintsJa: zod.array(zod.string()).optional(),
+    })
+    .describe("どの eBay API が成功／失敗したか（リサーチ自体は実行済み）"),
   searchedAt: zod.coerce.date(),
 });
 
@@ -222,6 +240,24 @@ export const InventoryResearchProductResponse = zod
       }),
     ),
     evidenceUrls: zod.array(zod.string()),
+    diagnostics: zod
+      .object({
+        itemId: zod.string().nullish(),
+        buyApiAuth: zod
+          .enum(["oauth_user_refresh", "client_credentials", "none"])
+          .optional(),
+        browseGetItemHttpStatus: zod.number().nullish(),
+        shoppingHadPositivePrice: zod.boolean().optional(),
+        tradingAck: zod.string().nullish(),
+        tradingErrorJa: zod.string().nullish(),
+        findingItemLookupHttpStatus: zod.number().nullish(),
+        browseSearchHttpStatus: zod.number().nullish(),
+        findingSearchHttpStatus: zod.number().nullish(),
+        competitorBrowseCount: zod.number().optional(),
+        competitorFindingCount: zod.number().optional(),
+        hintsJa: zod.array(zod.string()).optional(),
+      })
+      .describe("どの eBay API が成功／失敗したか（リサーチ自体は実行済み）"),
     searchedAt: zod.coerce.date(),
   })
   .and(
