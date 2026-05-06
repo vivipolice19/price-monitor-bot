@@ -1,43 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  useListInventoryProducts,
-  useInventoryResearchProduct,
-  useCreateMonitorFromInventory,
-  getListInventoryProductsQueryKey,
-  getListMonitorsQueryKey,
-  type InventoryResearchResponse,
-  type InventoryProductRow,
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useListInventoryProducts, getListInventoryProductsQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, RefreshCw, Package, ExternalLink, Link2 } from "lucide-react";
+import { RefreshCw, ExternalLink, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLocation } from "wouter";
 
 export function InventoryMonitorPage() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
 
   const listQ = useListInventoryProducts({
     query: {
@@ -46,145 +17,12 @@ export function InventoryMonitorPage() {
     },
   });
 
-  const researchMut = useInventoryResearchProduct();
-  const createMut = useCreateMonitorFromInventory();
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [activeProduct, setActiveProduct] = useState<InventoryProductRow | null>(null);
-  const [research, setResearch] = useState<InventoryResearchResponse | null>(null);
-  const [seedUrl, setSeedUrl] = useState<string>("");
-  const [myCondition, setMyCondition] = useState<string>("New");
-  const [myPriceInput, setMyPriceInput] = useState<string>("");
-
-  const conditionOptions = useMemo(() => {
-    if (!research) return ["New", "Used"];
-    const fromLow = Object.keys(research.lowestByCondition ?? {});
-    const base = research.originalItem?.condition;
-    const set = new Set<string>([...fromLow, base, myCondition].filter(Boolean) as string[]);
-    return Array.from(set);
-  }, [research, myCondition]);
-
-  const openDialogForProduct = (p: InventoryProductRow) => {
-    setActiveProduct(p);
-    setResearch(null);
-    setSeedUrl(p.ebay_url?.trim() ?? "");
-    setMyPriceInput(String(p.ebay_price_usd ?? ""));
-    setDialogOpen(true);
-    researchMut.mutate(
-      { data: { inventoryProductId: p.id } },
-      {
-        onSuccess: (data) => {
-          setResearch(data);
-          const inv = data.inventoryProduct;
-          const u = inv.ebay_url?.trim() ?? "";
-          const ownBase = u.split("?")[0] ?? u;
-          const candidates = (data.allItems ?? []).filter((it) => {
-            const base = String(it.url ?? "").split("?")[0] ?? "";
-            return base.length > 0 && base !== ownBase;
-          });
-          const best =
-            candidates
-              .filter((it) => (it.totalPrice ?? 0) > 0)
-              .sort((a, b) => (a.totalPrice ?? 0) - (b.totalPrice ?? 0))[0]?.url ??
-            data.originalItem?.url ??
-            u;
-          setSeedUrl(best);
-          setMyPriceInput(String(inv.ebay_price_usd ?? ""));
-          const c = data.originalItem?.condition;
-          if (c) setMyCondition(c);
-        },
-        onError: (e: Error & { data?: unknown }) => {
-          toast({
-            variant: "destructive",
-            title: "リサーチに失敗しました",
-            description: e.message,
-          });
-        },
-      },
-    );
+  const moveToResearch = (ebayUrl: string, myPrice: number) => {
+    const qp = new URLSearchParams();
+    qp.set("url", ebayUrl);
+    qp.set("myPrice", String(myPrice));
+    navigate(`/?${qp.toString()}`);
   };
-
-  useEffect(() => {
-    if (!dialogOpen) {
-      setActiveProduct(null);
-      setResearch(null);
-    }
-  }, [dialogOpen]);
-
-  const handleStartMonitor = () => {
-    if (!activeProduct) return;
-    const price = parseFloat(myPriceInput);
-    if (!Number.isFinite(price)) {
-      toast({ variant: "destructive", title: "価格が不正です" });
-      return;
-    }
-    if (!myCondition.trim()) {
-      toast({ variant: "destructive", title: "コンディションを選んでください" });
-      return;
-    }
-    const invUrl = activeProduct.ebay_url?.trim() ?? "";
-    const selectedCandidate = candidateEntries.find((c) => c.url === seedUrl);
-    const body = {
-      inventoryProductId: activeProduct.id,
-      myCondition: myCondition.trim(),
-      myPrice: price,
-      trackedTargetCondition: selectedCandidate?.condition ?? myCondition.trim(),
-      trackedTargetPrice: selectedCandidate?.total ?? price,
-      syncToSpreadsheetNow: true,
-      seedEbayUrl:
-        seedUrl.trim() && seedUrl.trim() !== invUrl ? seedUrl.trim() : undefined,
-    };
-    createMut.mutate(
-      { data: body },
-      {
-        onSuccess: (res) => {
-          toast({
-            title: res.updated ? "監視を更新しました" : "監視を登録しました",
-            description: res.spreadsheetSynced
-              ? `モニター ID ${res.id}。追跡対象URL/価格をシートへ即時反映しました。`
-              : `モニター ID ${res.id} / 起点URLは ${res.ebayUrl.slice(0, 48)}…`,
-          });
-          queryClient.invalidateQueries({ queryKey: getListInventoryProductsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getListMonitorsQueryKey() });
-          setDialogOpen(false);
-        },
-        onError: (e: Error) =>
-          toast({ variant: "destructive", title: "保存に失敗", description: e.message }),
-      },
-    );
-  };
-
-  const candidateEntries = useMemo(() => {
-    if (!research) return [];
-    type Row = { url: string; label: string; price: number; condition: string; total: number; isOwn: boolean };
-    const rows: Row[] = [];
-    const own = research.inventoryProduct?.ebay_url?.trim() ?? "";
-    const seen = new Set<string>();
-    const push = (r: Row) => {
-      if (seen.has(r.url)) return;
-      seen.add(r.url);
-      rows.push(r);
-    };
-    push({
-      url: research.originalItem.url,
-      label: "起点となった出品（同一商品として解析）",
-      price: research.originalItem.price,
-      condition: research.originalItem.condition || "—",
-      total: research.originalItem.totalPrice,
-      isOwn: own.length > 0 && research.originalItem.url.includes(own.split("?")[0] ?? ""),
-    });
-    for (const it of research.allItems ?? []) {
-      push({
-        url: it.url,
-        label: it.title?.slice(0, 60) ?? it.itemId,
-        price: it.price,
-        condition: it.condition || "—",
-        total: it.totalPrice,
-        isOwn: own.length > 0 && it.url.includes(own.split("?")[0] ?? ""),
-      });
-    }
-    return rows;
-  }, [research]);
 
   if (listQ.isLoading) {
     return (
@@ -218,9 +56,8 @@ export function InventoryMonitorPage() {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">在庫から監視</h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          出品管理アプリ（設定のベース URL）の一覧を読み、各行の eBay 出品を<strong>自動リサーチ</strong>
-          したうえで、監視の<strong>起点 URL</strong>（通常は自分の出品）と<strong>自分のコンディション</strong>
-          を選び、定期追跡に登録します。既に監視がある行は更新されます。
+          在庫一覧から通常の<strong>リサーチ画面</strong>へ移動します。監視開始はリサーチ結果を確認してから、
+          あなたがURLを選んで実行してください（自動監視は行いません）。
         </p>
       </div>
 
@@ -284,10 +121,10 @@ export function InventoryMonitorPage() {
                       <Button
                         size="sm"
                         disabled={!p.ebay_url?.trim()}
-                        onClick={() => openDialogForProduct(p)}
+                        onClick={() => moveToResearch(p.ebay_url, Number(p.ebay_price_usd))}
                       >
-                        <Link2 className="h-3.5 w-3.5 mr-1" />
-                        リサーチ→監視
+                        <Search className="h-3.5 w-3.5 mr-1" />
+                        リサーチへ移動
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -297,125 +134,6 @@ export function InventoryMonitorPage() {
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>同一商品リサーチ → 監視登録</DialogTitle>
-            <DialogDescription>
-              下の一覧から<strong>監視の起点</strong>になる出品 URL を1つ選びます。通常は自分の出品（在庫と同じ URL）のままです。コンディションはアラート比較に使います。
-            </DialogDescription>
-          </DialogHeader>
-
-          {!research && researchMut.isPending ? (
-            <div className="flex items-center gap-2 py-12 text-muted-foreground justify-center">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              リサーチ中…
-            </div>
-          ) : research ? (
-            <div className="space-y-4">
-              <div className="flex gap-3 rounded-lg border p-3 bg-muted/30">
-                <div className="h-16 w-16 rounded bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                  {research.originalItem.imageUrl ? (
-                    <img src={research.originalItem.imageUrl} alt="" className="h-full w-full object-contain" />
-                  ) : (
-                    <Package className="h-8 w-8 text-muted-foreground/40" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium line-clamp-2">{research.originalItem.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    在庫 ID {research.inventoryProduct.id} / 売価参照 ${Number(research.inventoryProduct.ebay_price_usd).toFixed(2)}
-                  </p>
-                </div>
-              </div>
-
-              {research.diagnostics?.hintsJa?.length ? (
-                <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-foreground/90">
-                  <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1.5">接続状況（リサーチは実行済み）</p>
-                  <ul className="list-disc pl-4 space-y-1">
-                    {research.diagnostics.hintsJa.map((line, i) => (
-                      <li key={i}>{line}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>自分の出品価格（USD）</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={myPriceInput}
-                    onChange={(e) => setMyPriceInput(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>自分のコンディション（競合と比較する軸）</Label>
-                  <Select value={myCondition} onValueChange={setMyCondition}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="選ぶ" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {conditionOptions.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>監視の起点 URL（候補から選択）</Label>
-                <RadioGroup value={seedUrl} onValueChange={setSeedUrl} className="gap-2">
-                  {candidateEntries.map((row, i) => (
-                    <div
-                      key={`${row.url}-${i}`}
-                      className="flex items-start gap-3 rounded-md border p-3 has-[:checked]:border-primary/60 has-[:checked]:bg-primary/5"
-                    >
-                      <RadioGroupItem value={row.url} id={`seed-${i}`} className="mt-1" />
-                      <label htmlFor={`seed-${i}`} className="flex-1 cursor-pointer space-y-1">
-                        <div className="text-sm font-medium flex items-center gap-2">
-                          {row.isOwn && <Badge variant="secondary">在庫と同じ出品</Badge>}
-                          <span className="text-muted-foreground font-normal">${row.total.toFixed(2)} / {row.condition}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground line-clamp-2">{row.label}</p>
-                        <a
-                          href={row.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-primary inline-flex items-center gap-1"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          開く <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </label>
-                    </div>
-                  ))}
-                </RadioGroup>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-destructive py-6">リサーチ結果がありません。</p>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              キャンセル
-            </Button>
-            <Button
-              onClick={handleStartMonitor}
-              disabled={!research || createMut.isPending || !seedUrl}
-            >
-              {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              この内容で監視を開始（または更新）
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
