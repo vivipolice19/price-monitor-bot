@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { monitorsTable, priceHistoryTable, alertsTable, spreadsheetConfigTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { researchEbayItem } from "../lib/ebay";
-import { syncAlertsToSpreadsheet, updateMonitorRowStatus } from "../lib/sheets";
+import { appendMonitorRowToSpreadsheet, syncAlertsToSpreadsheet, updateMonitorRowStatus } from "../lib/sheets";
 import { reviseEbayListingPrice } from "../lib/repricing";
 import { getValidEbayUserAccessTokenFromDb } from "../lib/ebayOAuth";
 
@@ -62,6 +62,28 @@ router.post("/monitors", async (req, res) => {
       checkIntervalMinutes: checkIntervalMinutes || 360,
       isActive: true,
     }).returning();
+
+    // If the user didn't specify a sheet row, try to append a new row automatically.
+    // This makes "監視" immediately visible in the inventory spreadsheet.
+    if (!monitor.spreadsheetRow) {
+      try {
+        const appended = await appendMonitorRowToSpreadsheet({
+          ebayUrl: monitor.ebayUrl,
+          myPrice: parseFloat(monitor.myPrice),
+          myCondition: monitor.myCondition,
+          label: monitor.label,
+        });
+        if (appended.row) {
+          await db
+            .update(monitorsTable)
+            .set({ spreadsheetRow: appended.row })
+            .where(eq(monitorsTable.id, monitor.id));
+          (monitor as any).spreadsheetRow = appended.row;
+        }
+      } catch (err) {
+        req.log.warn({ err, monitorId: monitor.id }, "appendMonitorRowToSpreadsheet failed");
+      }
+    }
 
     res.status(201).json({
       id: monitor.id,

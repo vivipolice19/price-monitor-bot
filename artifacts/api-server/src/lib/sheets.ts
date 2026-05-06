@@ -75,6 +75,15 @@ function toNumber(value: string | number | null | undefined): number | undefined
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+function parseRowFromUpdatedRange(range: string | undefined): number | null {
+  // e.g. "Sheet1!A12:Q12" -> 12
+  const r = String(range ?? "");
+  const m = r.match(/!([A-Z]+)(\d+)(:|$)/i);
+  if (!m) return null;
+  const row = parseInt(m[2], 10);
+  return Number.isFinite(row) ? row : null;
+}
+
 export async function ensureMonitoringHeaders(): Promise<void> {
   const result = await getSheets();
   if (!result) return;
@@ -104,6 +113,73 @@ export async function ensureMonitoringHeaders(): Promise<void> {
       })),
     },
   });
+}
+
+export async function appendMonitorRowToSpreadsheet(params: {
+  ebayUrl: string;
+  myPrice: number;
+  myCondition?: string;
+  label?: string | null;
+}): Promise<{ row: number | null }> {
+  const result = await getSheets();
+  if (!result) return { row: null };
+
+  const { sheets, config } = result;
+  if (!config.spreadsheetId || !config.sheetName) return { row: null };
+
+  await ensureMonitoringHeaders();
+
+  const sourceCol = config.sourceUrlColumnIndex ?? 0;
+  const ebayCol = config.ebayUrlColumnIndex ?? 1;
+  const myPriceCol = config.myPriceColumnIndex ?? 3;
+  const statusCol = config.inventoryStatusColumnIndex ?? 5;
+  const condCol = config.ebayListingConditionColumnIndex;
+
+  const extraCols = [
+    config.lowestPriceColumnIndex ?? 8,
+    config.lowestConditionColumnIndex ?? 9,
+    config.lastCheckColumnIndex ?? 10,
+    config.alertStatusColumnIndex ?? 11,
+    config.repricedValueColumnIndex ?? 12,
+    config.evidenceUrlsColumnIndex ?? 13,
+    config.trackedTargetUrlColumnIndex ?? 14,
+    config.trackedTargetConditionColumnIndex ?? 15,
+    config.trackedTargetPriceColumnIndex ?? 16,
+  ];
+
+  const all = [sourceCol, ebayCol, myPriceCol, statusCol, ...extraCols];
+  if (condCol != null && condCol >= 0) all.push(condCol);
+  const maxCol = Math.max(...all);
+
+  const row: any[] = Array.from({ length: maxCol + 1 }, () => "");
+  row[sourceCol] = params.label ? String(params.label) : "";
+  row[ebayCol] = params.ebayUrl;
+  row[myPriceCol] = params.myPrice;
+  row[statusCol] = "監視中";
+  if (condCol != null && condCol >= 0) {
+    row[condCol] = params.myCondition ? String(params.myCondition) : "";
+  }
+
+  // Tracked-target columns (monitoring columns) are useful even before the first check runs.
+  const trackedTargetUrlIndex = config.trackedTargetUrlColumnIndex ?? 14;
+  const trackedTargetConditionIndex = config.trackedTargetConditionColumnIndex ?? 15;
+  const trackedTargetPriceIndex = config.trackedTargetPriceColumnIndex ?? 16;
+  row[trackedTargetUrlIndex] = params.ebayUrl;
+  row[trackedTargetConditionIndex] = params.myCondition ? String(params.myCondition) : "";
+  row[trackedTargetPriceIndex] = params.myPrice;
+
+  const resp = await sheets.spreadsheets.values.append({
+    spreadsheetId: config.spreadsheetId,
+    range: `${config.sheetName}!A:A`,
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: {
+      values: [row],
+    },
+  });
+
+  const appendedRow = parseRowFromUpdatedRange(resp.data.updates?.updatedRange);
+  return { row: appendedRow };
 }
 
 export async function getRowPrice(rowNumber: number): Promise<{ found: boolean; myPrice?: number; rawValue?: string }> {

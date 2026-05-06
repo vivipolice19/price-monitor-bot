@@ -358,10 +358,11 @@ export function Research() {
                           <span className="inline-block max-w-[120px] truncate text-sm font-medium">{item.seller}</span>
                         </TableCell>
                         <TableCell className="p-4 text-right">
-                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" asChild>
+                          {/* On mobile there is no hover, so keep actions visible. */}
+                          <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                            <Button size="sm" variant="outline" className="h-8 font-semibold" asChild>
                               <a href={item.url} target="_blank" rel="noreferrer">
-                                <ExternalLink className="h-4 w-4" />
+                                開く <ExternalLink className="ml-2 h-4 w-4" />
                               </a>
                             </Button>
                             <Button size="sm" variant="default" className="h-8 font-bold px-3 shadow-sm" onClick={() => setSelectedItemForMonitor(item)}>
