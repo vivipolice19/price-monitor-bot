@@ -142,13 +142,7 @@ export async function appendMonitorRowToSpreadsheet(params: {
 
   await ensureMonitoringHeaders();
 
-  const sourceCol = config.sourceUrlColumnIndex ?? 0;
-  const ebayCol = config.ebayUrlColumnIndex ?? 1;
-  const myPriceCol = config.myPriceColumnIndex ?? 3;
-  const statusCol = config.inventoryStatusColumnIndex ?? 5;
-  const condCol = config.ebayListingConditionColumnIndex;
-
-  const extraCols = [
+  const writeCols = [
     MONITOR_COLS.lowestPrice,
     MONITOR_COLS.lowestCondition,
     MONITOR_COLS.lastCheck,
@@ -160,20 +154,12 @@ export async function appendMonitorRowToSpreadsheet(params: {
     MONITOR_COLS.trackedTargetPrice,
   ];
 
-  const all = [sourceCol, ebayCol, myPriceCol, statusCol, ...extraCols];
-  if (condCol != null && condCol >= 0) all.push(condCol);
-  const maxCol = Math.max(...all);
+  const maxCol = Math.max(...writeCols);
 
   const row: any[] = Array.from({ length: maxCol + 1 }, () => "");
-  row[sourceCol] = params.label ? String(params.label) : "";
-  row[ebayCol] = params.ebayUrl;
-  row[myPriceCol] = params.myPrice;
-  row[statusCol] = "監視中";
-  if (condCol != null && condCol >= 0) {
-    row[condCol] = params.myCondition ? String(params.myCondition) : "";
-  }
 
-  // Tracked-target columns (monitoring columns) are useful even before the first check runs.
+  // Keep A-H intact for inventory management. Write monitor metadata only to I-Q.
+  row[MONITOR_COLS.alertStatus] = "監視中";
   row[MONITOR_COLS.trackedTargetUrl] = params.ebayUrl;
   row[MONITOR_COLS.trackedTargetCondition] = params.myCondition ? String(params.myCondition) : "";
   row[MONITOR_COLS.trackedTargetPrice] = params.myPrice;
