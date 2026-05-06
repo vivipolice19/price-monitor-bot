@@ -100,6 +100,16 @@ function toEbayItemFromBrowse(raw: any): EbayItem | null {
   };
 }
 
+const EBAY_BROWSE_MARKETPLACE_ID = process.env.EBAY_BROWSE_MARKETPLACE_ID ?? "EBAY_US";
+
+function browseAuthHeaders(accessToken: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    /** Required for predictable US inventory in search/get_item responses */
+    "X-EBAY-C-MARKETPLACE-ID": EBAY_BROWSE_MARKETPLACE_ID,
+  };
+}
+
 async function browseGetItemByLegacyId(
   itemId: string,
   accessToken: string,
@@ -107,9 +117,7 @@ async function browseGetItemByLegacyId(
   try {
     const resp = await axios.get("https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id", {
       params: { legacy_item_id: itemId },
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: browseAuthHeaders(accessToken),
       timeout: 12000,
       validateStatus: () => true,
     });
@@ -134,29 +142,46 @@ async function searchItemsByTitleBrowseWithMeta(
   accessToken: string,
 ): Promise<{ items: EbayItem[]; httpStatus: number }> {
   try {
-    const keywords = originalItem.title.split(" ").slice(0, 8).join(" ").trim();
-    if (!keywords) return { items: [], httpStatus: 0 };
-    const resp = await axios.get("https://api.ebay.com/buy/browse/v1/item_summary/search", {
-      params: {
-        q: keywords,
-        limit: 50,
-        sort: "price",
-      },
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      timeout: 12000,
-      validateStatus: () => true,
-    });
-    if (resp.status !== 200) {
-      logger.warn({ status: resp.status, data: resp.data, keywords }, "Browse API search failed");
-      return { items: [], httpStatus: resp.status };
+    const tokens = originalItem.title.split(/\s+/).filter(Boolean);
+    const queries = [
+      tokens.slice(0, 14).join(" ").trim(),
+      tokens.slice(0, 8).join(" ").trim(),
+      tokens.slice(0, 4).join(" ").trim(),
+    ].filter((q, i, a) => q && a.indexOf(q) === i);
+
+    let lastStatus = 0;
+    const seen = new Set<string>();
+    const merged: EbayItem[] = [];
+
+    for (const q of queries) {
+      const resp = await axios.get("https://api.ebay.com/buy/browse/v1/item_summary/search", {
+        params: {
+          q,
+          limit: 50,
+          /** Lowest price+shipping first (see Buy Browse search `sort` docs) */
+          sort: "price",
+        },
+        headers: browseAuthHeaders(accessToken),
+        timeout: 12000,
+        validateStatus: () => true,
+      });
+      lastStatus = resp.status;
+      if (resp.status !== 200) {
+        logger.warn({ status: resp.status, data: resp.data, q }, "Browse API search attempt failed");
+        continue;
+      }
+      const rawItems = Array.isArray(resp.data?.itemSummaries) ? resp.data.itemSummaries : [];
+      for (const it of rawItems) {
+        const row = toEbayItemFromBrowse(it);
+        if (!row?.itemId) continue;
+        if (seen.has(row.itemId)) continue;
+        seen.add(row.itemId);
+        merged.push(row);
+      }
+      if (merged.length >= 15) break;
     }
-    const rawItems = Array.isArray(resp.data?.itemSummaries) ? resp.data.itemSummaries : [];
-    const items = rawItems
-      .map((it: any) => toEbayItemFromBrowse(it))
-      .filter((it: EbayItem | null): it is EbayItem => Boolean(it));
-    return { items, httpStatus: resp.status };
+
+    return { items: merged, httpStatus: lastStatus };
   } catch (err) {
     logger.warn({ err }, "Browse API title search failed");
     return { items: [], httpStatus: 0 };
@@ -648,53 +673,62 @@ function isSameItemStrict(original: EbayItem, candidate: EbayItem): boolean {
   return score >= 0.72;
 }
 
-async function searchItemsByTitleWithMeta(
-  originalItem: EbayItem,
-  appId: string | undefined,
-): Promise<{ items: EbayItem[]; httpStatus: number }> {
-  if (!appId) {
-    return { items: [], httpStatus: 0 };
+type FindingAdvancedSearchAttempt = {
+  items: EbayItem[];
+  httpStatus: number;
+  ack: string;
+};
+
+function findingAckOk(ack: string): boolean {
+  const a = ack.toLowerCase();
+  return !a || a === "success" || a === "warning";
+}
+
+async function findingFindItemsAdvancedOne(
+  appId: string,
+  keywords: string,
+  opts: { withConditionFilter: boolean; entriesPerPage: number },
+): Promise<FindingAdvancedSearchAttempt> {
+  const params: Record<string, string> = {
+    "OPERATION-NAME": "findItemsAdvanced",
+    "SERVICE-VERSION": "1.0.0",
+    "SECURITY-APPNAME": appId,
+    "RESPONSE-DATA-FORMAT": "JSON",
+    keywords,
+    "paginationInput.entriesPerPage": String(opts.entriesPerPage),
+    sortOrder: "PricePlusShippingLowest",
+  };
+  if (opts.withConditionFilter) {
+    params["itemFilter(0).name"] = "Condition";
+    params["itemFilter(0).value(0)"] = "1000";
+    params["itemFilter(0).value(1)"] = "1500";
+    params["itemFilter(0).value(2)"] = "2000";
+    params["itemFilter(0).value(3)"] = "2500";
+    params["itemFilter(0).value(4)"] = "3000";
+    params["itemFilter(0).value(5)"] = "4000";
+    params["itemFilter(0).value(6)"] = "5000";
+    params["itemFilter(0).value(7)"] = "6000";
   }
 
   try {
-    const titleKeywords = originalItem.title.split(" ").slice(0, 6).join(" ").trim();
-    const keywords = titleKeywords || originalItem.itemId || "";
-    if (!keywords) return { items: [], httpStatus: 0 };
-
     const resp = await axios.get("https://svcs.ebay.com/services/search/FindingService/v1", {
-      params: {
-        "OPERATION-NAME": "findItemsAdvanced",
-        "SERVICE-VERSION": "1.0.0",
-        "SECURITY-APPNAME": appId,
-        "RESPONSE-DATA-FORMAT": "JSON",
-        keywords,
-        "paginationInput.entriesPerPage": "20",
-        "itemFilter(0).name": "Condition",
-        "itemFilter(0).value(0)": "1000",
-        "itemFilter(0).value(1)": "1500",
-        "itemFilter(0).value(2)": "2000",
-        "itemFilter(0).value(3)": "2500",
-        "itemFilter(0).value(4)": "3000",
-        "itemFilter(0).value(5)": "4000",
-        "itemFilter(0).value(6)": "5000",
-        "itemFilter(0).value(7)": "6000",
-        sortOrder: "PricePlusShippingLowest",
-      },
+      params,
       timeout: 10000,
       validateStatus: () => true,
     });
+
+    const searchResult = resp.data?.findItemsAdvancedResponse?.[0];
+    const ack = String(searchResult?.ack?.[0] ?? "");
 
     if (resp.status !== 200) {
       logger.warn(
         { status: resp.status, keywords, data: resp.data },
         "eBay Finding API HTTP error for title search",
       );
-      return { items: [], httpStatus: resp.status };
+      return { items: [], httpStatus: resp.status, ack };
     }
 
-    const searchResult = resp.data?.findItemsAdvancedResponse?.[0];
-    const ack = String(searchResult?.ack?.[0] ?? "").toLowerCase();
-    if (ack && ack !== "success" && ack !== "warning") {
+    if (ack && !findingAckOk(ack)) {
       logger.warn(
         {
           ack,
@@ -703,18 +737,72 @@ async function searchItemsByTitleWithMeta(
         },
         "eBay Finding API returned failure for title search",
       );
-      return { items: [], httpStatus: resp.status };
+      return { items: [], httpStatus: resp.status, ack };
     }
-    const items = searchResult?.searchResult?.[0]?.item || [];
 
+    const rawItems = searchResult?.searchResult?.[0]?.item || [];
     return {
-      items: items.map((item: any): EbayItem => toEbayItemFromFinding(item)),
+      items: rawItems.map((item: any): EbayItem => toEbayItemFromFinding(item)),
       httpStatus: resp.status,
+      ack,
     };
   } catch (err) {
-    logger.warn({ err }, "eBay Finding API failed");
+    logger.warn({ err, keywords }, "eBay Finding API failed");
+    return { items: [], httpStatus: 0, ack: "" };
+  }
+}
+
+async function searchItemsByTitleWithMeta(
+  originalItem: EbayItem,
+  appId: string | undefined,
+): Promise<{ items: EbayItem[]; httpStatus: number }> {
+  if (!appId) {
     return { items: [], httpStatus: 0 };
   }
+
+  const titleKeywords = originalItem.title.split(" ").slice(0, 6).join(" ").trim();
+  const keywords = titleKeywords || originalItem.itemId || "";
+  if (!keywords) return { items: [], httpStatus: 0 };
+
+  const primary = await findingFindItemsAdvancedOne(appId, keywords, {
+    withConditionFilter: true,
+    entriesPerPage: 20,
+  });
+
+  let items = primary.items;
+  let httpStatus = primary.httpStatus;
+
+  const shouldRetrySansCondition =
+    httpStatus === 500 ||
+    (httpStatus === 200 && !findingAckOk(primary.ack)) ||
+    (httpStatus === 200 && findingAckOk(primary.ack) && primary.items.length === 0);
+
+  if (shouldRetrySansCondition) {
+    const fallback = await findingFindItemsAdvancedOne(appId, keywords, {
+      withConditionFilter: false,
+      entriesPerPage: 50,
+    });
+    if (fallback.httpStatus === 200 && findingAckOk(fallback.ack) && fallback.items.length > 0) {
+      items = fallback.items;
+      httpStatus = fallback.httpStatus;
+    } else if (httpStatus === 500 && fallback.httpStatus !== 500) {
+      if (fallback.items.length > 0) {
+        items = fallback.items;
+        httpStatus = fallback.httpStatus;
+      }
+    } else if (items.length === 0 && fallback.items.length > 0) {
+      items = fallback.items;
+      httpStatus = fallback.httpStatus;
+    } else if (items.length === 0) {
+      if (primary.httpStatus === 500 && fallback.items.length === 0) {
+        httpStatus = primary.httpStatus;
+      } else {
+        httpStatus = fallback.httpStatus || httpStatus;
+      }
+    }
+  }
+
+  return { items, httpStatus };
 }
 
 async function searchItemsByTitle(originalItem: EbayItem, appId: string | undefined): Promise<EbayItem[]> {
