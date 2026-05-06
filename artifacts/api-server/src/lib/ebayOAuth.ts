@@ -183,7 +183,9 @@ export async function getBuyApiAccessTokenFromDb(): Promise<{
     "";
   const clientSecret =
     config?.ebayOAuthClientSecret?.trim() ??
+    config?.ebayCertId?.trim() ??
     process.env.EBAY_OAUTH_CLIENT_SECRET?.trim() ??
+    process.env.EBAY_CERT_ID?.trim() ??
     "";
 
   if (!clientId || !clientSecret) {

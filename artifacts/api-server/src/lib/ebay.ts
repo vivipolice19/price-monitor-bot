@@ -1018,7 +1018,7 @@ export async function researchEbayItem(
   const hintsJa: string[] = [];
   if (buyApiAuth === "none") {
     hintsJa.push(
-      "Browse API 用トークンがありません。設定に「OAuth Client Secret」を保存すると在庫アプリと同じクライアント認証で検索できます。",
+      "Browse API 用トークンがありません。設定の「OAuth Client Secret」または「eBay Cert ID」を保存してください。",
     );
   }
   if (browseGetItemHttpStatus != null && browseGetItemHttpStatus !== 200) {
