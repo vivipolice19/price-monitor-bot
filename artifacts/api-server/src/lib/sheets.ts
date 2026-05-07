@@ -791,22 +791,26 @@ export async function clearMonitorCells(row: number): Promise<void> {
       ? buildResearchLinkFormulaForRow(row, appBaseUrl, ebayColLetter, myPriceColLetter)
       : "";
 
+  const data: sheets_v4.Schema$ValueRange[] = [
+    { range: `${config.sheetName}!${lowestPriceCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${lowestConditionCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${lastCheckCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${alertStatusCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${repricedCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${evidenceCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${trackedTargetUrlCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${trackedTargetConditionCol}${row}`, values: [[""]] },
+    { range: `${config.sheetName}!${trackedTargetPriceCol}${row}`, values: [[""]] },
+  ];
+  if (researchFormula.length > 0) {
+    data.push({ range: `${config.sheetName}!${researchCol}${row}`, values: [[researchFormula]] });
+  }
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
     requestBody: {
       valueInputOption: "USER_ENTERED",
-      data: [
-        { range: `${config.sheetName}!${lowestPriceCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${lowestConditionCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${lastCheckCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${alertStatusCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${repricedCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${evidenceCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${trackedTargetUrlCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${trackedTargetConditionCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${trackedTargetPriceCol}${row}`, values: [[""]] },
-        { range: `${config.sheetName}!${researchCol}${row}`, values: [[researchFormula]] },
-      ],
+      data,
     },
   });
 }

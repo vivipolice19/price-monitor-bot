@@ -6,6 +6,7 @@ import { researchEbayItem } from "../lib/ebay";
 import {
   appendMonitorRowToSpreadsheet,
   clearMonitorCells,
+  ensureMonitoringHeaders,
   setMonitorAlertStatusCell,
   syncAlertsToSpreadsheet,
   updateMonitorRowStatus,
@@ -208,6 +209,7 @@ router.delete("/monitors/:id", async (req, res) => {
     if (target?.spreadsheetRow) {
       try {
         await clearMonitorCells(target.spreadsheetRow);
+        await ensureMonitoringHeaders();
       } catch (err) {
         req.log.warn({ err, monitorId: id, row: target.spreadsheetRow }, "clearMonitorCells failed");
       }
