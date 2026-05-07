@@ -112,7 +112,8 @@ function buildResearchLinkFormulaForRow(
   ebayColLetter: string,
   myPriceColLetter: string,
 ): string {
-  return `=IF(LEN(${ebayColLetter}${row}),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}${row})&"&url="&ENCODEURL(${ebayColLetter}${row})&"&myPrice="&${myPriceColLetter}${row},"リサーチ"),"")`;
+  const alertStatusColLetter = columnIndexToLetter(MONITOR_COLS.alertStatus);
+  return `=IF(AND(LEN(${ebayColLetter}${row}),${alertStatusColLetter}${row}<>"監視中"),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}${row})&"&url="&ENCODEURL(${ebayColLetter}${row})&"&myPrice="&${myPriceColLetter}${row},"リサーチ"),"")`;
 }
 
 export async function ensureMonitoringHeaders(): Promise<void> {
@@ -138,9 +139,10 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   const appBaseUrl = resolveAppBaseUrl();
   const ebayColLetter = columnIndexToLetter(config.ebayUrlColumnIndex ?? 1);
   const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
+  const alertStatusColLetter = columnIndexToLetter(MONITOR_COLS.alertStatus);
   const researchFormula =
     appBaseUrl.length > 0
-      ? `=ARRAYFORMULA(IF(LEN(${ebayColLetter}2:${ebayColLetter}),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
+      ? `=ARRAYFORMULA(IF((LEN(${ebayColLetter}2:${ebayColLetter})>0)*(${alertStatusColLetter}2:${alertStatusColLetter}<>"監視中"),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
       : "";
 
   await sheets.spreadsheets.values.batchUpdate({
@@ -152,6 +154,8 @@ export async function ensureMonitoringHeaders(): Promise<void> {
           range: `${config.sheetName}!${columnIndexToLetter(col)}1`,
           values: [[title]],
         })),
+        // Clear stale per-row values so ARRAYFORMULA can spill across I column.
+        { range: `${config.sheetName}!I2:I3000`, values: Array.from({ length: 2999 }, () => [""]) },
         ...(researchFormula
           ? [{ range: `${config.sheetName}!I2`, values: [[researchFormula]] }]
           : []),
@@ -782,14 +786,6 @@ export async function clearMonitorCells(row: number): Promise<void> {
   const trackedTargetUrlCol = columnIndexToLetter(MONITOR_COLS.trackedTargetUrl);
   const trackedTargetConditionCol = columnIndexToLetter(MONITOR_COLS.trackedTargetCondition);
   const trackedTargetPriceCol = columnIndexToLetter(MONITOR_COLS.trackedTargetPrice);
-  const researchCol = columnIndexToLetter(8);
-  const appBaseUrl = resolveAppBaseUrl();
-  const ebayColLetter = columnIndexToLetter(config.ebayUrlColumnIndex ?? 1);
-  const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
-  const researchFormula =
-    appBaseUrl.length > 0
-      ? buildResearchLinkFormulaForRow(row, appBaseUrl, ebayColLetter, myPriceColLetter)
-      : "";
 
   const data: sheets_v4.Schema$ValueRange[] = [
     { range: `${config.sheetName}!${lowestPriceCol}${row}`, values: [[""]] },
@@ -802,10 +798,6 @@ export async function clearMonitorCells(row: number): Promise<void> {
     { range: `${config.sheetName}!${trackedTargetConditionCol}${row}`, values: [[""]] },
     { range: `${config.sheetName}!${trackedTargetPriceCol}${row}`, values: [[""]] },
   ];
-  if (researchFormula.length > 0) {
-    data.push({ range: `${config.sheetName}!${researchCol}${row}`, values: [[researchFormula]] });
-  }
-
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
     requestBody: {
