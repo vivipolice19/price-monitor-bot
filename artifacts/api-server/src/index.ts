@@ -25,8 +25,12 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  runMonitorSyncPipeline().catch((err) => {
-    logger.error({ err }, "Initial monitor sync failed");
-  });
+  if (process.env.ENABLE_STARTUP_MONITOR_SYNC === "true") {
+    runMonitorSyncPipeline().catch((err) => {
+      logger.error({ err }, "Initial monitor sync failed");
+    });
+  } else {
+    logger.info("Initial monitor sync skipped (set ENABLE_STARTUP_MONITOR_SYNC=true to enable)");
+  }
   startScheduler(performPriceCheck);
 });

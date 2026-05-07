@@ -46,9 +46,11 @@ router.get("/products", async (req, res) => {
       apiKey: cfg.apiKey,
     });
     const monitors = await db.select().from(monitorsTable);
-    const byInv = new Map<number, number>();
+    const byInv = new Map<number, { id: number; row: number | null }>();
     for (const m of monitors) {
-      if (m.inventoryProductId != null) byInv.set(m.inventoryProductId, m.id);
+      if (m.inventoryProductId != null) {
+        byInv.set(m.inventoryProductId, { id: m.id, row: m.spreadsheetRow ?? null });
+      }
     }
     const products = data.products.map((p: InventoryCheckerProduct) => ({
       id: p.id,
@@ -59,7 +61,8 @@ router.get("/products", async (req, res) => {
       status: p.status,
       alert_status: p.alert_status,
       last_check: p.last_check,
-      monitorId: byInv.get(p.id) ?? null,
+      monitorId: byInv.get(p.id)?.id ?? null,
+      monitorRow: byInv.get(p.id)?.row ?? null,
     }));
     res.json({ count: products.length, products });
   } catch (err: any) {

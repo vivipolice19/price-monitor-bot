@@ -19,11 +19,15 @@ export function InventoryMonitorPage() {
 
   const RESEARCH_PREFILL_KEY = "ebayPriceCheckerResearchPrefill";
 
-  const moveToResearch = (ebayUrl: string, myPrice: number) => {
+  const moveToResearch = (ebayUrl: string, myPrice: number, row?: number | null) => {
     try {
       sessionStorage.setItem(
         RESEARCH_PREFILL_KEY,
-        JSON.stringify({ url: ebayUrl, myPrice: String(myPrice) }),
+        JSON.stringify({
+          url: ebayUrl,
+          myPrice: String(myPrice),
+          row: row != null ? String(row) : undefined,
+        }),
       );
     } catch {
       /* private mode 等 */
@@ -31,6 +35,7 @@ export function InventoryMonitorPage() {
     const qp = new URLSearchParams();
     qp.set("url", ebayUrl);
     qp.set("myPrice", String(myPrice));
+    if (row != null && Number.isFinite(row)) qp.set("row", String(row));
     navigate(`/?${qp.toString()}`);
   };
 
@@ -131,7 +136,7 @@ export function InventoryMonitorPage() {
                       <Button
                         size="sm"
                         disabled={!p.ebay_url?.trim()}
-                        onClick={() => moveToResearch(p.ebay_url, Number(p.ebay_price_usd))}
+                        onClick={() => moveToResearch(p.ebay_url, Number(p.ebay_price_usd), p.monitorRow)}
                       >
                         <Search className="h-3.5 w-3.5 mr-1" />
                         リサーチへ移動

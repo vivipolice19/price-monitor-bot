@@ -52,11 +52,12 @@ export function Research() {
 
   const RESEARCH_PREFILL_KEY = "ebayPriceCheckerResearchPrefill";
 
-  // 在庫ページ「リサーチへ移動」: ?url= &myPrice= または sessionStorage の引き継ぎ
+  // 在庫ページ「リサーチへ移動」: ?url= &myPrice= &row= または sessionStorage の引き継ぎ
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     let urlParam = params.get("url")?.trim();
     let priceParam = params.get("myPrice");
+    let rowParam = params.get("row");
 
     if (urlParam) {
       try {
@@ -70,10 +71,11 @@ export function Research() {
       try {
         const raw = sessionStorage.getItem(RESEARCH_PREFILL_KEY);
         if (raw) {
-          const o = JSON.parse(raw) as { url?: string; myPrice?: string };
+          const o = JSON.parse(raw) as { url?: string; myPrice?: string; row?: string };
           sessionStorage.removeItem(RESEARCH_PREFILL_KEY);
           urlParam = o.url?.trim();
           if (o.myPrice != null && o.myPrice !== "") priceParam = o.myPrice;
+          if (o.row != null && o.row !== "") rowParam = o.row;
         }
       } catch {
         sessionStorage.removeItem(RESEARCH_PREFILL_KEY);
@@ -86,9 +88,13 @@ export function Research() {
     if (priceParam != null && priceParam !== "") {
       form.setValue("myPrice", priceParam);
     }
+    if (rowParam != null && rowParam !== "") {
+      form.setValue("row", rowParam);
+    }
 
     params.delete("url");
     params.delete("myPrice");
+    params.delete("row");
     const rest = params.toString();
     const pathOnly = window.location.pathname + (rest ? `?${rest}` : "");
     window.history.replaceState(window.history.state, "", pathOnly);
