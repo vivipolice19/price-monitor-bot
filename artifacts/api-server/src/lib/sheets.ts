@@ -97,6 +97,24 @@ function parseRowFromUpdatedRange(range: string | undefined): number | null {
   return Number.isFinite(row) ? row : null;
 }
 
+function resolveAppBaseUrl(): string {
+  return (
+    process.env.APP_PUBLIC_URL?.trim() ||
+    process.env.FRONTEND_URL?.trim() ||
+    process.env.RENDER_EXTERNAL_URL?.trim() ||
+    ""
+  ).replace(/\/$/, "");
+}
+
+function buildResearchLinkFormulaForRow(
+  row: number,
+  appBaseUrl: string,
+  ebayColLetter: string,
+  myPriceColLetter: string,
+): string {
+  return `=IF(LEN(${ebayColLetter}${row}),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}${row})&"&url="&ENCODEURL(${ebayColLetter}${row})&"&myPrice="&${myPriceColLetter}${row},"リサーチ"),"")`;
+}
+
 export async function ensureMonitoringHeaders(): Promise<void> {
   const result = await getSheets();
   if (!result) return;
@@ -117,16 +135,12 @@ export async function ensureMonitoringHeaders(): Promise<void> {
     { col: MONITOR_COLS.trackedTargetPrice, title: "追跡対象価格(USD)" },
   ];
 
-  const appBaseUrl =
-    process.env.APP_PUBLIC_URL?.trim() ||
-    process.env.FRONTEND_URL?.trim() ||
-    process.env.RENDER_EXTERNAL_URL?.trim() ||
-    "";
+  const appBaseUrl = resolveAppBaseUrl();
   const ebayColLetter = columnIndexToLetter(config.ebayUrlColumnIndex ?? 1);
   const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
   const researchFormula =
     appBaseUrl.length > 0
-      ? `=ARRAYFORMULA(IF(LEN(${ebayColLetter}2:${ebayColLetter}),HYPERLINK("${appBaseUrl.replace(/\/$/, "")}/sheet-open?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
+      ? `=ARRAYFORMULA(IF(LEN(${ebayColLetter}2:${ebayColLetter}),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
       : "";
 
   await sheets.spreadsheets.values.batchUpdate({
@@ -768,6 +782,14 @@ export async function clearMonitorCells(row: number): Promise<void> {
   const trackedTargetUrlCol = columnIndexToLetter(MONITOR_COLS.trackedTargetUrl);
   const trackedTargetConditionCol = columnIndexToLetter(MONITOR_COLS.trackedTargetCondition);
   const trackedTargetPriceCol = columnIndexToLetter(MONITOR_COLS.trackedTargetPrice);
+  const researchCol = columnIndexToLetter(8);
+  const appBaseUrl = resolveAppBaseUrl();
+  const ebayColLetter = columnIndexToLetter(config.ebayUrlColumnIndex ?? 1);
+  const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
+  const researchFormula =
+    appBaseUrl.length > 0
+      ? buildResearchLinkFormulaForRow(row, appBaseUrl, ebayColLetter, myPriceColLetter)
+      : "";
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
@@ -783,6 +805,7 @@ export async function clearMonitorCells(row: number): Promise<void> {
         { range: `${config.sheetName}!${trackedTargetUrlCol}${row}`, values: [[""]] },
         { range: `${config.sheetName}!${trackedTargetConditionCol}${row}`, values: [[""]] },
         { range: `${config.sheetName}!${trackedTargetPriceCol}${row}`, values: [[""]] },
+        { range: `${config.sheetName}!${researchCol}${row}`, values: [[researchFormula]] },
       ],
     },
   });
