@@ -139,11 +139,7 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   const appBaseUrl = resolveAppBaseUrl();
   const ebayColLetter = columnIndexToLetter(config.ebayUrlColumnIndex ?? 1);
   const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
-  const alertStatusColLetter = columnIndexToLetter(MONITOR_COLS.alertStatus);
-  const researchFormula =
-    appBaseUrl.length > 0
-      ? `=ARRAYFORMULA(IF((LEN(${ebayColLetter}2:${ebayColLetter})>0)*(${alertStatusColLetter}2:${alertStatusColLetter}<>"監視中"),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
-      : "";
+  const hasAppUrl = appBaseUrl.length > 0;
 
   // I列は途中に値が残ると ARRAYFORMULA が壊れるため、APIで確実にクリアしてから式を再セットする
   try {
@@ -156,6 +152,14 @@ export async function ensureMonitoringHeaders(): Promise<void> {
     logger.warn({ err }, "Failed to clear I column before applying research formula");
   }
 
+  // ARRAYFORMULA はスピルが止まりやすいので、I列は行ごとに式で埋める（堅牢）
+  const iColFormulas: string[][] = [];
+  for (let row = 2; row <= 3000; row++) {
+    iColFormulas.push([
+      hasAppUrl ? buildResearchLinkFormulaForRow(row, appBaseUrl, ebayColLetter, myPriceColLetter) : "",
+    ]);
+  }
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
     requestBody: {
@@ -165,9 +169,7 @@ export async function ensureMonitoringHeaders(): Promise<void> {
           range: `${config.sheetName}!${columnIndexToLetter(col)}1`,
           values: [[title]],
         })),
-        ...(researchFormula
-          ? [{ range: `${config.sheetName}!I2`, values: [[researchFormula]] }]
-          : []),
+        { range: `${config.sheetName}!I2:I3000`, values: iColFormulas },
       ],
     },
   });
