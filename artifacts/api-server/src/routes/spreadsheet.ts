@@ -6,6 +6,7 @@ import {
   syncAlertsToSpreadsheet,
   getRowPrice,
   getRowData,
+  ensureMonitoringHeaders,
   suggestSpreadsheetColumns,
   runMonitorSyncPipeline,
   syncMonitorsFromInventoryChecker,
@@ -204,6 +205,12 @@ router.post("/spreadsheet/config", async (req, res) => {
         .values(updateData)
         .returning();
       saved = created;
+    }
+
+    try {
+      await ensureMonitoringHeaders();
+    } catch (err) {
+      req.log.warn({ err }, "ensureMonitoringHeaders failed after config save");
     }
 
     res.json({
