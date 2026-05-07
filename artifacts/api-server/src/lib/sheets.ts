@@ -734,6 +734,25 @@ export async function updateTrackedTargetCells(params: {
   });
 }
 
+export async function setMonitorAlertStatusCell(params: {
+  row: number;
+  alertStatus: string;
+}): Promise<void> {
+  const result = await getSheets();
+  if (!result) return;
+  const { sheets, config } = result;
+  if (!config.spreadsheetId || !config.sheetName) return;
+
+  const alertStatusCol = columnIndexToLetter(MONITOR_COLS.alertStatus);
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: config.spreadsheetId,
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data: [{ range: `${config.sheetName}!${alertStatusCol}${params.row}`, values: [[params.alertStatus]] }],
+    },
+  });
+}
+
 export async function clearMonitorCells(row: number): Promise<void> {
   const result = await getSheets();
   if (!result) return;

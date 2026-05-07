@@ -3,7 +3,14 @@ import { db } from "@workspace/db";
 import { monitorsTable, priceHistoryTable, alertsTable, spreadsheetConfigTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { researchEbayItem } from "../lib/ebay";
-import { appendMonitorRowToSpreadsheet, clearMonitorCells, syncAlertsToSpreadsheet, updateMonitorRowStatus } from "../lib/sheets";
+import {
+  appendMonitorRowToSpreadsheet,
+  clearMonitorCells,
+  setMonitorAlertStatusCell,
+  syncAlertsToSpreadsheet,
+  updateMonitorRowStatus,
+  updateTrackedTargetCells,
+} from "../lib/sheets";
 import { reviseEbayListingPrice } from "../lib/repricing";
 import { getValidEbayUserAccessTokenFromDb } from "../lib/ebayOAuth";
 
@@ -82,6 +89,22 @@ router.post("/monitors", async (req, res) => {
         }
       } catch (err) {
         req.log.warn({ err, monitorId: monitor.id }, "appendMonitorRowToSpreadsheet failed");
+      }
+    }
+
+    if (monitor.spreadsheetRow) {
+      try {
+        await Promise.all([
+          updateTrackedTargetCells({
+            row: monitor.spreadsheetRow,
+            trackedTargetUrl: monitor.ebayUrl,
+            trackedTargetCondition: monitor.myCondition,
+            trackedTargetPrice: parseFloat(monitor.myPrice),
+          }),
+          setMonitorAlertStatusCell({ row: monitor.spreadsheetRow, alertStatus: "監視中" }),
+        ]);
+      } catch (err) {
+        req.log.warn({ err, monitorId: monitor.id, row: monitor.spreadsheetRow }, "initial monitor row sync failed");
       }
     }
 
