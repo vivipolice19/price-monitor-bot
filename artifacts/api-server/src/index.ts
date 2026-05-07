@@ -1,7 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
-import { runMonitorSyncPipeline } from "./lib/sheets";
 import { performPriceCheck } from "./routes/monitors";
 
 const rawPort = process.env["PORT"];
@@ -25,12 +24,6 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  if (process.env.ENABLE_STARTUP_MONITOR_SYNC === "true") {
-    runMonitorSyncPipeline().catch((err) => {
-      logger.error({ err }, "Initial monitor sync failed");
-    });
-  } else {
-    logger.info("Initial monitor sync skipped (set ENABLE_STARTUP_MONITOR_SYNC=true to enable)");
-  }
+  logger.info("Initial monitor sync disabled by default");
   startScheduler(performPriceCheck);
 });

@@ -3,7 +3,6 @@ import { db } from "@workspace/db";
 import { monitorsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
-import { runMonitorSyncPipeline } from "./sheets";
 
 let scheduledTask: ScheduledTask | null = null;
 
@@ -16,9 +15,6 @@ export function startScheduler(performPriceCheck: (id: number) => Promise<any>) 
     logger.info("Running scheduled price checks");
 
     try {
-      if (process.env.ENABLE_PERIODIC_MONITOR_SYNC === "true") {
-        await runMonitorSyncPipeline();
-      }
       const monitors = await db.select().from(monitorsTable)
         .where(eq(monitorsTable.isActive, true));
 
