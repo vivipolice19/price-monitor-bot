@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { useLocation } from "wouter";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useResearchPrice, useGetSpreadsheetRow, getGetSpreadsheetRowQueryKey } from "@workspace/api-client-react";
@@ -36,6 +37,7 @@ function formatResearchError(err: unknown): string {
 }
 
 export function Research() {
+  const [location] = useLocation();
   const [selectedItemForMonitor, setSelectedItemForMonitor] = useState<any>(null);
   const research = useResearchPrice();
   
@@ -47,6 +49,51 @@ export function Research() {
       row: "",
     },
   });
+
+  const RESEARCH_PREFILL_KEY = "ebayPriceCheckerResearchPrefill";
+
+  // 在庫ページ「リサーチへ移動」: ?url= &myPrice= または sessionStorage の引き継ぎ
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let urlParam = params.get("url")?.trim();
+    let priceParam = params.get("myPrice");
+
+    if (urlParam) {
+      try {
+        sessionStorage.removeItem(RESEARCH_PREFILL_KEY);
+      } catch {
+        /* noop */
+      }
+    }
+
+    if (!urlParam) {
+      try {
+        const raw = sessionStorage.getItem(RESEARCH_PREFILL_KEY);
+        if (raw) {
+          const o = JSON.parse(raw) as { url?: string; myPrice?: string };
+          sessionStorage.removeItem(RESEARCH_PREFILL_KEY);
+          urlParam = o.url?.trim();
+          if (o.myPrice != null && o.myPrice !== "") priceParam = o.myPrice;
+        }
+      } catch {
+        sessionStorage.removeItem(RESEARCH_PREFILL_KEY);
+      }
+    }
+
+    if (!urlParam) return;
+
+    form.setValue("url", urlParam);
+    if (priceParam != null && priceParam !== "") {
+      form.setValue("myPrice", priceParam);
+    }
+
+    params.delete("url");
+    params.delete("myPrice");
+    const rest = params.toString();
+    const pathOnly = window.location.pathname + (rest ? `?${rest}` : "");
+    window.history.replaceState(window.history.state, "", pathOnly);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 在庫→リサーチの1回だけ同期（location 変化時）
+  }, [location]);
 
   const rowValue = form.watch("row");
   const { refetch: fetchRow, isFetching: isFetchingRow } = useGetSpreadsheetRow(rowValue ? Number(rowValue) : 0, {

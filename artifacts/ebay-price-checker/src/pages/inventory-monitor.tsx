@@ -17,7 +17,17 @@ export function InventoryMonitorPage() {
     },
   });
 
+  const RESEARCH_PREFILL_KEY = "ebayPriceCheckerResearchPrefill";
+
   const moveToResearch = (ebayUrl: string, myPrice: number) => {
+    try {
+      sessionStorage.setItem(
+        RESEARCH_PREFILL_KEY,
+        JSON.stringify({ url: ebayUrl, myPrice: String(myPrice) }),
+      );
+    } catch {
+      /* private mode 等 */
+    }
     const qp = new URLSearchParams();
     qp.set("url", ebayUrl);
     qp.set("myPrice", String(myPrice));
