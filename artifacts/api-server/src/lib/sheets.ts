@@ -145,6 +145,17 @@ export async function ensureMonitoringHeaders(): Promise<void> {
       ? `=ARRAYFORMULA(IF((LEN(${ebayColLetter}2:${ebayColLetter})>0)*(${alertStatusColLetter}2:${alertStatusColLetter}<>"監視中"),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
       : "";
 
+  // I列は途中に値が残ると ARRAYFORMULA が壊れるため、APIで確実にクリアしてから式を再セットする
+  try {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: config.spreadsheetId,
+      range: `${config.sheetName}!I2:I`,
+      requestBody: {},
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to clear I column before applying research formula");
+  }
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
     requestBody: {
@@ -154,8 +165,6 @@ export async function ensureMonitoringHeaders(): Promise<void> {
           range: `${config.sheetName}!${columnIndexToLetter(col)}1`,
           values: [[title]],
         })),
-        // Clear stale per-row values so ARRAYFORMULA can spill across I column.
-        { range: `${config.sheetName}!I2:I3000`, values: Array.from({ length: 2999 }, () => [""]) },
         ...(researchFormula
           ? [{ range: `${config.sheetName}!I2`, values: [[researchFormula]] }]
           : []),
