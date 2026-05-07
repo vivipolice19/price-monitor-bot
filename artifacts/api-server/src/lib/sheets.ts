@@ -126,7 +126,7 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
   const researchFormula =
     appBaseUrl.length > 0
-      ? `=ARRAYFORMULA(IF(LEN(${ebayColLetter}2:${ebayColLetter}),HYPERLINK("${appBaseUrl.replace(/\/$/, "")}/?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
+      ? `=ARRAYFORMULA(IF(LEN(${ebayColLetter}2:${ebayColLetter}),HYPERLINK("${appBaseUrl.replace(/\/$/, "")}/sheet-open?row="&ROW(${ebayColLetter}2:${ebayColLetter})&"&url="&ENCODEURL(${ebayColLetter}2:${ebayColLetter})&"&myPrice="&${myPriceColLetter}2:${myPriceColLetter},"リサーチ"),""))`
       : "";
 
   await sheets.spreadsheets.values.batchUpdate({
