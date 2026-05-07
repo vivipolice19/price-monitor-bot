@@ -116,6 +116,43 @@ function buildResearchLinkFormulaForRow(
   return `=IF(AND(LEN(${ebayColLetter}${row}),${alertStatusColLetter}${row}<>"監視中"),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}${row})&"&url="&ENCODEURL(${ebayColLetter}${row})&"&myPrice="&${myPriceColLetter}${row},"リサーチ"),"")`;
 }
 
+async function applyResearchLinksPerRow(params: {
+  sheets: sheets_v4.Sheets;
+  spreadsheetId: string;
+  sheetName: string;
+  appBaseUrl: string;
+  ebayColLetter: string;
+  myPriceColLetter: string;
+  startRow?: number;
+  endRow?: number;
+  chunkSize?: number;
+}): Promise<void> {
+  const startRow = params.startRow ?? 2;
+  const endRow = params.endRow ?? 3000;
+  const chunkSize = params.chunkSize ?? 500;
+
+  // Clear once so old stray cells never block updates.
+  await params.sheets.spreadsheets.values.clear({
+    spreadsheetId: params.spreadsheetId,
+    range: `${params.sheetName}!I${startRow}:I`,
+    requestBody: {},
+  });
+
+  for (let s = startRow; s <= endRow; s += chunkSize) {
+    const e = Math.min(endRow, s + chunkSize - 1);
+    const values: string[][] = [];
+    for (let r = s; r <= e; r++) {
+      values.push([buildResearchLinkFormulaForRow(r, params.appBaseUrl, params.ebayColLetter, params.myPriceColLetter)]);
+    }
+    await params.sheets.spreadsheets.values.update({
+      spreadsheetId: params.spreadsheetId,
+      range: `${params.sheetName}!I${s}:I${e}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values },
+    });
+  }
+}
+
 export async function ensureMonitoringHeaders(): Promise<void> {
   const result = await getSheets();
   if (!result) return;
@@ -141,25 +178,6 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
   const hasAppUrl = appBaseUrl.length > 0;
 
-  // I列は途中に値が残ると ARRAYFORMULA が壊れるため、APIで確実にクリアしてから式を再セットする
-  try {
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: config.spreadsheetId,
-      range: `${config.sheetName}!I2:I`,
-      requestBody: {},
-    });
-  } catch (err) {
-    logger.warn({ err }, "Failed to clear I column before applying research formula");
-  }
-
-  // ARRAYFORMULA はスピルが止まりやすいので、I列は行ごとに式で埋める（堅牢）
-  const iColFormulas: string[][] = [];
-  for (let row = 2; row <= 3000; row++) {
-    iColFormulas.push([
-      hasAppUrl ? buildResearchLinkFormulaForRow(row, appBaseUrl, ebayColLetter, myPriceColLetter) : "",
-    ]);
-  }
-
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
     requestBody: {
@@ -169,10 +187,23 @@ export async function ensureMonitoringHeaders(): Promise<void> {
           range: `${config.sheetName}!${columnIndexToLetter(col)}1`,
           values: [[title]],
         })),
-        { range: `${config.sheetName}!I2:I3000`, values: iColFormulas },
       ],
     },
   });
+
+  if (!hasAppUrl) return;
+  try {
+    await applyResearchLinksPerRow({
+      sheets,
+      spreadsheetId: config.spreadsheetId,
+      sheetName: config.sheetName,
+      appBaseUrl,
+      ebayColLetter,
+      myPriceColLetter,
+    });
+  } catch (err) {
+    logger.warn({ err }, "applyResearchLinksPerRow failed");
+  }
 }
 
 export async function appendMonitorRowToSpreadsheet(params: {
