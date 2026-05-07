@@ -136,7 +136,7 @@ export function InventoryMonitorPage() {
                       <Button
                         size="sm"
                         disabled={!p.ebay_url?.trim()}
-                        onClick={() => moveToResearch(p.ebay_url, Number(p.ebay_price_usd), p.monitorRow)}
+                        onClick={() => p.ebay_url && moveToResearch(p.ebay_url, Number(p.ebay_price_usd), p.monitorRow)}
                       >
                         <Search className="h-3.5 w-3.5 mr-1" />
                         リサーチへ移動

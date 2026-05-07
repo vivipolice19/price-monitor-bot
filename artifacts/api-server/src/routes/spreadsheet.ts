@@ -5,6 +5,7 @@ import {
   testSheetsConnection,
   syncAlertsToSpreadsheet,
   getRowPrice,
+  getRowData,
   suggestSpreadsheetColumns,
   runMonitorSyncPipeline,
   syncMonitorsFromInventoryChecker,
@@ -328,11 +329,12 @@ router.get("/spreadsheet/row/:row", async (req, res) => {
   }
 
   try {
-    const result = await getRowPrice(row);
+    const result = await getRowData(row);
     res.json({
       rowNumber: row,
+      ebayUrl: result.ebayUrl,
       myPrice: result.myPrice,
-      rawValue: result.rawValue,
+      rawValue: result.rawPriceValue,
       found: result.found,
     });
   } catch (err: any) {

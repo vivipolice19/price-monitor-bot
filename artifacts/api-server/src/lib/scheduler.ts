@@ -1,11 +1,11 @@
-import cron from "node-cron";
+import cron, { type ScheduledTask } from "node-cron";
 import { db } from "@workspace/db";
 import { monitorsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { runMonitorSyncPipeline } from "./sheets";
 
-let scheduledTask: cron.ScheduledTask | null = null;
+let scheduledTask: ScheduledTask | null = null;
 
 export function startScheduler(performPriceCheck: (id: number) => Promise<any>) {
   if (scheduledTask) {

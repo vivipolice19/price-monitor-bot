@@ -108,6 +108,8 @@ export type InventoryProductRow = InventoryProductSnapshot & {
   last_check?: string | null;
   /** Existing monitor id if already tracked */
   monitorId?: number | null;
+  /** Existing monitor spreadsheet row if already tracked */
+  monitorRow?: number | null;
 };
 
 export interface InventoryProductsListResponse {
@@ -295,6 +297,7 @@ export interface SpreadsheetConfig {
 
 export interface SpreadsheetRowData {
   rowNumber: number;
+  ebayUrl?: string;
   myPrice?: number;
   rawValue?: string;
   found: boolean;

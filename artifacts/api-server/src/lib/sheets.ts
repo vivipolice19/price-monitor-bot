@@ -174,7 +174,7 @@ export async function appendMonitorRowToSpreadsheet(params: {
     },
   });
 
-  const appendedRow = parseRowFromUpdatedRange(resp.data.updates?.updatedRange);
+  const appendedRow = parseRowFromUpdatedRange(resp.data.updates?.updatedRange ?? undefined);
   return { row: appendedRow };
 }
 
@@ -223,6 +223,49 @@ export async function getRowPrice(rowNumber: number): Promise<{ found: boolean; 
     return { found: true, myPrice, rawValue };
   } catch (err) {
     logger.error({ err, rowNumber, range }, "Failed to read row from spreadsheet");
+    return { found: false };
+  }
+}
+
+export async function getRowData(rowNumber: number): Promise<{
+  found: boolean;
+  ebayUrl?: string;
+  myPrice?: number;
+  rawPriceValue?: string;
+}> {
+  const result = await getSheets();
+  if (!result) return { found: false };
+
+  const { sheets, config } = result;
+  if (!config.spreadsheetId || !config.sheetName) return { found: false };
+
+  const ebayCol = config.ebayUrlColumnIndex ?? 1;
+  const myPriceCol = config.myPriceColumnIndex ?? 3;
+  const maxCol = Math.max(ebayCol, myPriceCol);
+  const range = `${config.sheetName}!A${rowNumber}:${columnIndexToLetter(maxCol)}${rowNumber}`;
+
+  try {
+    const resp = await sheets.spreadsheets.values.get({
+      spreadsheetId: config.spreadsheetId,
+      range,
+    });
+
+    const row = resp.data.values?.[0] ?? [];
+    const ebayUrlRaw = row[ebayCol]?.toString().trim();
+    const ebayUrl = ebayUrlRaw && ebayUrlRaw.includes("ebay.") ? ebayUrlRaw : undefined;
+
+    const rawPriceValue = row[myPriceCol]?.toString();
+    let myPrice: number | undefined;
+    if (rawPriceValue != null && rawPriceValue !== "") {
+      const cleaned = String(rawPriceValue).replace(/[^0-9.]/g, "");
+      const p = parseFloat(cleaned);
+      if (!Number.isNaN(p)) myPrice = p;
+    }
+
+    if (!ebayUrl && myPrice === undefined) return { found: false };
+    return { found: true, ebayUrl, myPrice, rawPriceValue };
+  } catch (err) {
+    logger.error({ err, rowNumber, range }, "Failed to read row data from spreadsheet");
     return { found: false };
   }
 }
@@ -553,7 +596,8 @@ export async function linkMonitorsToSpreadsheetRows(): Promise<number> {
     if (!itemId) continue;
     const m = byItemId.get(itemId);
     if (!m) continue;
-    if (m.spreadsheetRow === spreadsheetRow) continue;
+    // 既に spreadsheetRow が設定済みなら「勝手に行を移動」しない（ズレの原因になる）
+    if (m.spreadsheetRow != null) continue;
     await db
       .update(monitorsTable)
       .set({ spreadsheetRow })

@@ -8,6 +8,7 @@
 
 export interface SpreadsheetRowData {
   rowNumber: number;
+  ebayUrl?: string;
   myPrice?: number;
   rawValue?: string;
   found: boolean;

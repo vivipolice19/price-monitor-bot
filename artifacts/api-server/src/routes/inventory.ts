@@ -290,7 +290,7 @@ router.post("/monitors", async (req, res) => {
       }
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       id: monitor.id,
       ebayUrl: monitor.ebayUrl,
       myPrice: parseFloat(monitor.myPrice),
@@ -310,7 +310,7 @@ router.post("/monitors", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "inventoryCreateMonitor failed");
-    res.status(500).json({ error: "internal_error" });
+    return res.status(500).json({ error: "internal_error" });
   }
 });
 

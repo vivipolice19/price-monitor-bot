@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useLocation } from "wouter";
 import { z } from "zod";
@@ -40,6 +40,7 @@ export function Research() {
   const [location] = useLocation();
   const [selectedItemForMonitor, setSelectedItemForMonitor] = useState<any>(null);
   const research = useResearchPrice();
+  const didAutoFetchRowRef = useRef(false);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -113,13 +114,29 @@ export function Research() {
     if (!rowValue) return;
     try {
       const result = await fetchRow();
-      if (result.data && result.data.found && result.data.myPrice !== undefined) {
-        form.setValue("myPrice", result.data.myPrice.toString());
+      if (result.data && result.data.found) {
+        if (result.data.ebayUrl) {
+          form.setValue("url", result.data.ebayUrl);
+        }
+        if (result.data.myPrice !== undefined) {
+          form.setValue("myPrice", result.data.myPrice.toString());
+        }
       }
     } catch (e) {
       // Error handled silently here
     }
   };
+
+  // URL が指定されていないが row が指定されている場合は、行から自動で URL/価格 を取得
+  useEffect(() => {
+    const url = form.getValues("url")?.trim();
+    if (url) return;
+    if (!rowValue) return;
+    if (didAutoFetchRowRef.current) return;
+    didAutoFetchRowRef.current = true;
+    handleFetchPrice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- row 指定の初回だけ自動取得
+  }, [rowValue, location]);
 
   function onSubmit(data: FormValues) {
     research.mutate({
