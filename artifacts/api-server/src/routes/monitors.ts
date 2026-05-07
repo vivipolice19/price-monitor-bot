@@ -7,6 +7,7 @@ import {
   appendMonitorRowToSpreadsheet,
   clearMonitorCells,
   ensureMonitoringHeaders,
+  setResearchCell,
   setMonitorAlertStatusCell,
   syncAlertsToSpreadsheet,
   updateMonitorRowStatus,
@@ -103,6 +104,8 @@ router.post("/monitors", async (req, res) => {
             trackedTargetPrice: parseFloat(monitor.myPrice),
           }),
           setMonitorAlertStatusCell({ row: monitor.spreadsheetRow, alertStatus: "監視中" }),
+          // Hide research link while monitoring.
+          setResearchCell({ row: monitor.spreadsheetRow, value: "" }),
         ]);
       } catch (err) {
         req.log.warn({ err, monitorId: monitor.id, row: monitor.spreadsheetRow }, "initial monitor row sync failed");

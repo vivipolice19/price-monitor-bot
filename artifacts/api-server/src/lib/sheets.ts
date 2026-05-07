@@ -106,49 +106,72 @@ function resolveAppBaseUrl(): string {
   ).replace(/\/$/, "");
 }
 
-function buildResearchLinkFormulaForRow(
-  row: number,
-  appBaseUrl: string,
-  ebayColLetter: string,
-  myPriceColLetter: string,
-): string {
-  const alertStatusColLetter = columnIndexToLetter(MONITOR_COLS.alertStatus);
-  return `=IF(AND(LEN(${ebayColLetter}${row}),${alertStatusColLetter}${row}<>"監視中"),HYPERLINK("${appBaseUrl}/sheet-open?row="&ROW(${ebayColLetter}${row})&"&url="&ENCODEURL(${ebayColLetter}${row})&"&myPrice="&${myPriceColLetter}${row},"リサーチ"),"")`;
+function buildResearchUrl(params: { appBaseUrl: string; row: number; ebayUrl: string; myPrice?: string | number }): string {
+  const base = params.appBaseUrl.replace(/\/$/, "");
+  const qp = new URLSearchParams();
+  qp.set("row", String(params.row));
+  qp.set("url", params.ebayUrl);
+  if (params.myPrice !== undefined && params.myPrice !== null && String(params.myPrice) !== "") {
+    qp.set("myPrice", String(params.myPrice));
+  }
+  return `${base}/sheet-open?${qp.toString()}`;
 }
 
-async function applyResearchLinksPerRow(params: {
+async function applyResearchLinksFromSheet(params: {
   sheets: sheets_v4.Sheets;
   spreadsheetId: string;
   sheetName: string;
   appBaseUrl: string;
-  ebayColLetter: string;
-  myPriceColLetter: string;
-  startRow?: number;
-  endRow?: number;
+  ebayUrlColIndex: number;
+  myPriceColIndex: number;
+  alertStatusColIndex: number;
+  maxRows?: number;
   chunkSize?: number;
 }): Promise<void> {
-  const startRow = params.startRow ?? 2;
-  const endRow = params.endRow ?? 3000;
+  const maxRows = params.maxRows ?? 3000;
   const chunkSize = params.chunkSize ?? 500;
 
-  // Clear once so old stray cells never block updates.
+  const maxCol = Math.max(params.ebayUrlColIndex, params.myPriceColIndex, params.alertStatusColIndex);
+  const range = `${params.sheetName}!A2:${columnIndexToLetter(maxCol)}${maxRows}`;
+
+  // Clear I column first so no stale cells remain.
   await params.sheets.spreadsheets.values.clear({
     spreadsheetId: params.spreadsheetId,
-    range: `${params.sheetName}!I${startRow}:I`,
+    range: `${params.sheetName}!I2:I`,
     requestBody: {},
   });
 
-  for (let s = startRow; s <= endRow; s += chunkSize) {
-    const e = Math.min(endRow, s + chunkSize - 1);
-    const values: string[][] = [];
-    for (let r = s; r <= e; r++) {
-      values.push([buildResearchLinkFormulaForRow(r, params.appBaseUrl, params.ebayColLetter, params.myPriceColLetter)]);
+  const resp = await params.sheets.spreadsheets.values.get({
+    spreadsheetId: params.spreadsheetId,
+    range,
+  });
+  const rows = resp.data.values ?? [];
+
+  const out: string[][] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const rowNumber = i + 2;
+    const row = rows[i] ?? [];
+    const ebayUrl = row[params.ebayUrlColIndex]?.toString().trim() ?? "";
+    const myPrice = row[params.myPriceColIndex]?.toString().trim();
+    const alertStatus = row[params.alertStatusColIndex]?.toString().trim() ?? "";
+
+    if (!ebayUrl || !ebayUrl.includes("ebay.") || alertStatus === "監視中") {
+      out.push([""]);
+      continue;
     }
+    out.push([buildResearchUrl({ appBaseUrl: params.appBaseUrl, row: rowNumber, ebayUrl, myPrice })]);
+  }
+
+  // Write I column in chunks to avoid request limits.
+  for (let start = 0; start < out.length; start += chunkSize) {
+    const end = Math.min(out.length, start + chunkSize);
+    const startRow = start + 2;
+    const endRow = end + 1;
     await params.sheets.spreadsheets.values.update({
       spreadsheetId: params.spreadsheetId,
-      range: `${params.sheetName}!I${s}:I${e}`,
+      range: `${params.sheetName}!I${startRow}:I${endRow}`,
       valueInputOption: "USER_ENTERED",
-      requestBody: { values },
+      requestBody: { values: out.slice(start, end) },
     });
   }
 }
@@ -174,8 +197,6 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   ];
 
   const appBaseUrl = resolveAppBaseUrl();
-  const ebayColLetter = columnIndexToLetter(config.ebayUrlColumnIndex ?? 1);
-  const myPriceColLetter = columnIndexToLetter(config.myPriceColumnIndex ?? 3);
   const hasAppUrl = appBaseUrl.length > 0;
 
   await sheets.spreadsheets.values.batchUpdate({
@@ -193,16 +214,17 @@ export async function ensureMonitoringHeaders(): Promise<void> {
 
   if (!hasAppUrl) return;
   try {
-    await applyResearchLinksPerRow({
+    await applyResearchLinksFromSheet({
       sheets,
       spreadsheetId: config.spreadsheetId,
       sheetName: config.sheetName,
       appBaseUrl,
-      ebayColLetter,
-      myPriceColLetter,
+      ebayUrlColIndex: config.ebayUrlColumnIndex ?? 1,
+      myPriceColIndex: config.myPriceColumnIndex ?? 3,
+      alertStatusColIndex: MONITOR_COLS.alertStatus,
     });
   } catch (err) {
-    logger.warn({ err }, "applyResearchLinksPerRow failed");
+    logger.warn({ err }, "applyResearchLinksFromSheet failed");
   }
 }
 
@@ -813,6 +835,19 @@ export async function setMonitorAlertStatusCell(params: {
   });
 }
 
+export async function setResearchCell(params: { row: number; value: string }): Promise<void> {
+  const result = await getSheets();
+  if (!result) return;
+  const { sheets, config } = result;
+  if (!config.spreadsheetId || !config.sheetName) return;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: config.spreadsheetId,
+    range: `${config.sheetName}!I${params.row}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[params.value]] },
+  });
+}
+
 export async function clearMonitorCells(row: number): Promise<void> {
   const result = await getSheets();
   if (!result) return;
@@ -847,6 +882,23 @@ export async function clearMonitorCells(row: number): Promise<void> {
       data,
     },
   });
+
+  // Restore I column research URL for this row (non-formula, reliable)
+  const appBaseUrl = resolveAppBaseUrl();
+  if (!appBaseUrl) return;
+  try {
+    const rowData = await getRowData(row);
+    if (!rowData.found || !rowData.ebayUrl) return;
+    const url = buildResearchUrl({ appBaseUrl, row, ebayUrl: rowData.ebayUrl, myPrice: rowData.myPrice });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: config.spreadsheetId,
+      range: `${config.sheetName}!I${row}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [[url]] },
+    });
+  } catch (err) {
+    logger.warn({ err, row }, "Failed to restore research cell");
+  }
 }
 
 export async function syncAlertsToSpreadsheet(): Promise<{ synced: number; failed: number }> {
