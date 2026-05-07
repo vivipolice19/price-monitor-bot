@@ -276,26 +276,34 @@ async function performPriceCheck(monitorId: number): Promise<{
     userToken: config?.ebayUserToken,
   });
 
+  const origId = originalItem.itemId;
   let lowestPrice = Infinity;
   let lowestCondition = "Unknown";
+  let primaryCompetitor: (typeof allItems)[number] | undefined;
 
   const sameConditionItem = lowestByCondition[monitor.myCondition];
-  if (sameConditionItem) {
+  if (sameConditionItem && sameConditionItem.itemId !== origId) {
     lowestPrice = sameConditionItem.totalPrice;
     lowestCondition = sameConditionItem.condition;
+    primaryCompetitor = sameConditionItem;
   } else {
     for (const item of allItems) {
+      if (item.itemId === origId) continue;
       if (item.totalPrice < lowestPrice) {
         lowestPrice = item.totalPrice;
         lowestCondition = item.condition;
+        primaryCompetitor = item;
       }
     }
   }
 
-  if (lowestPrice === Infinity) {
+  if (lowestPrice === Infinity || primaryCompetitor === undefined) {
     lowestPrice = myPrice;
     lowestCondition = monitor.myCondition;
+    primaryCompetitor = undefined;
   }
+
+  const sheetEvidenceUrls = primaryCompetitor?.url ? [primaryCompetitor.url] : [];
 
   await db.update(monitorsTable).set({
     currentLowestPrice: String(lowestPrice),
@@ -368,10 +376,10 @@ async function performPriceCheck(monitorId: number): Promise<{
         checkedAt: new Date(),
         alertStatus: "要eBay停止",
         repricedValue: repricedTo,
-        evidenceUrls,
-        trackedTargetUrl: monitor.ebayUrl,
-        trackedTargetCondition: originalItem.condition || monitor.myCondition,
-        trackedTargetPrice: originalItem.totalPrice,
+        evidenceUrls: sheetEvidenceUrls,
+        trackedTargetUrl: primaryCompetitor?.url,
+        trackedTargetCondition: primaryCompetitor?.condition,
+        trackedTargetPrice: primaryCompetitor?.totalPrice,
       });
     }
 
@@ -387,14 +395,22 @@ async function performPriceCheck(monitorId: number): Promise<{
       lowestCondition,
       checkedAt: new Date(),
       alertStatus: "正常",
-      evidenceUrls,
-      trackedTargetUrl: monitor.ebayUrl,
-      trackedTargetCondition: originalItem.condition || monitor.myCondition,
-      trackedTargetPrice: originalItem.totalPrice,
+      evidenceUrls: sheetEvidenceUrls,
+      trackedTargetUrl: primaryCompetitor?.url,
+      trackedTargetCondition: primaryCompetitor?.condition,
+      trackedTargetPrice: primaryCompetitor?.totalPrice,
     });
   }
 
-  return { lowestPrice, lowestCondition, myPrice, alertTriggered, repricedTo, evidenceUrls, message };
+  return {
+    lowestPrice,
+    lowestCondition,
+    myPrice,
+    alertTriggered,
+    repricedTo,
+    evidenceUrls: sheetEvidenceUrls.length > 0 ? sheetEvidenceUrls : evidenceUrls.slice(0, 3),
+    message,
+  };
 }
 
 router.post("/monitors/:id/check", async (req, res) => {

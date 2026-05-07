@@ -469,6 +469,12 @@ export async function syncMonitorsFromInventoryChecker(): Promise<{
 
     if (!isActive) continue;
 
+    // デフォルトでは在庫APIから監視行を自動作成しない（監視はリサーチ／手動登録のみ）。
+    // 在庫と既存監視の同期だけにしたい場合は INVENTORY_AUTO_CREATE_MONITORS=true を設定。
+    if (process.env.INVENTORY_AUTO_CREATE_MONITORS !== "true") {
+      continue;
+    }
+
     const [inserted] = await db
       .insert(monitorsTable)
       .values({
@@ -599,7 +605,12 @@ export async function updateMonitorRowStatus(params: {
   const trackedTargetConditionCol = columnIndexToLetter(MONITOR_COLS.trackedTargetCondition);
   const trackedTargetPriceCol = columnIndexToLetter(MONITOR_COLS.trackedTargetPrice);
 
-  const evidence = (params.evidenceUrls ?? []).slice(0, 5).join("\n");
+  const maxEvidence = (() => {
+    const n = parseInt(process.env.MONITOR_EVIDENCE_URL_MAX ?? "1", 10);
+    if (Number.isFinite(n) && n >= 1) return Math.min(10, n);
+    return 1;
+  })();
+  const evidence = (params.evidenceUrls ?? []).filter(Boolean).slice(0, maxEvidence).join("\n");
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
