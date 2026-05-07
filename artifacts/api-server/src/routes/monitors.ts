@@ -63,9 +63,9 @@ router.post("/monitors", async (req, res) => {
       isActive: true,
     }).returning();
 
-    // If the user didn't specify a sheet row, try to append a new row automatically.
-    // This makes "監視" immediately visible in the inventory spreadsheet.
-    if (!monitor.spreadsheetRow) {
+    // 行未指定時の自動追記は行ズレの原因になるため既定OFF。
+    // 必要な場合のみ MONITOR_APPEND_ROW_IF_MISSING=true で有効化。
+    if (!monitor.spreadsheetRow && process.env.MONITOR_APPEND_ROW_IF_MISSING === "true") {
       try {
         const appended = await appendMonitorRowToSpreadsheet({
           ebayUrl: monitor.ebayUrl,

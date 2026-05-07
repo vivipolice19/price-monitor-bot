@@ -14,15 +14,15 @@ import { triggerInventoryCheckerSync } from "../lib/inventoryChecker";
 
 const router = Router();
 const FIXED_MONITOR_COLUMNS = {
-  lowestPriceColumnIndex: 8,
-  lowestConditionColumnIndex: 9,
-  lastCheckColumnIndex: 10,
-  alertStatusColumnIndex: 11,
-  repricedValueColumnIndex: 12,
-  evidenceUrlsColumnIndex: 13,
-  trackedTargetUrlColumnIndex: 14,
-  trackedTargetConditionColumnIndex: 15,
-  trackedTargetPriceColumnIndex: 16,
+  lowestPriceColumnIndex: 9,
+  lowestConditionColumnIndex: 10,
+  lastCheckColumnIndex: 11,
+  alertStatusColumnIndex: 12,
+  repricedValueColumnIndex: 13,
+  evidenceUrlsColumnIndex: 14,
+  trackedTargetUrlColumnIndex: 15,
+  trackedTargetConditionColumnIndex: 16,
+  trackedTargetPriceColumnIndex: 17,
 } as const;
 
 function isMissingSpreadsheetTable(err: unknown): boolean {

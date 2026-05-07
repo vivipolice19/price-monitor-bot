@@ -42,9 +42,9 @@ const sheetSchema = z.object({
   sourceUrlColumnIndex: z.coerce.number().min(0).default(0),
   ebayUrlColumnIndex: z.coerce.number().min(0).default(1),
   inventoryStatusColumnIndex: z.coerce.number().min(0).default(5),
-  trackedTargetUrlColumnIndex: z.coerce.number().min(0).default(14),
-  trackedTargetConditionColumnIndex: z.coerce.number().min(0).default(15),
-  trackedTargetPriceColumnIndex: z.coerce.number().min(0).default(16),
+  trackedTargetUrlColumnIndex: z.coerce.number().min(0).default(15),
+  trackedTargetConditionColumnIndex: z.coerce.number().min(0).default(16),
+  trackedTargetPriceColumnIndex: z.coerce.number().min(0).default(17),
   ebayListingConditionColumnIndex: z.string().optional(),
   inventoryCheckerBaseUrl: z.string().optional(),
   inventoryCheckerApiKey: z.string().optional(),
@@ -87,9 +87,9 @@ export function Settings() {
       sourceUrlColumnIndex: 0,
       ebayUrlColumnIndex: 1,
       inventoryStatusColumnIndex: 5,
-      trackedTargetUrlColumnIndex: 14,
-      trackedTargetConditionColumnIndex: 15,
-      trackedTargetPriceColumnIndex: 16,
+      trackedTargetUrlColumnIndex: 15,
+      trackedTargetConditionColumnIndex: 16,
+      trackedTargetPriceColumnIndex: 17,
       ebayListingConditionColumnIndex: "",
       inventoryCheckerBaseUrl: "https://ebay-lowest-checker-1.onrender.com",
       inventoryCheckerApiKey: "",
@@ -139,9 +139,9 @@ export function Settings() {
         sourceUrlColumnIndex: config.sourceUrlColumnIndex ?? 0,
         ebayUrlColumnIndex: config.ebayUrlColumnIndex ?? 1,
         inventoryStatusColumnIndex: config.inventoryStatusColumnIndex ?? 5,
-        trackedTargetUrlColumnIndex: config.trackedTargetUrlColumnIndex ?? 14,
-        trackedTargetConditionColumnIndex: config.trackedTargetConditionColumnIndex ?? 15,
-        trackedTargetPriceColumnIndex: config.trackedTargetPriceColumnIndex ?? 16,
+        trackedTargetUrlColumnIndex: config.trackedTargetUrlColumnIndex ?? 15,
+        trackedTargetConditionColumnIndex: config.trackedTargetConditionColumnIndex ?? 16,
+        trackedTargetPriceColumnIndex: config.trackedTargetPriceColumnIndex ?? 17,
         ebayListingConditionColumnIndex:
           config.ebayListingConditionColumnIndex != null
             ? String(config.ebayListingConditionColumnIndex)
@@ -350,8 +350,8 @@ export function Settings() {
               ：トップで eBay URL を入れて「分析する」。シートは不要です。
             </p>
             <p>
-              <strong className="text-foreground">在庫連携から一気に</strong>
-              ：左メニュー「在庫から監視」で管理アプリの一覧 → 自動リサーチ → 候補URL選択 → 監視登録ができます。
+              <strong className="text-foreground">スプレッドシート起点（推奨）</strong>
+              ：I列の「リサーチ」リンクから開くと、行番号に紐づいたURL/価格を自動読込できます。監視開始後の反映は同じ行の J列以降に固定されます。
             </p>
             <p>
               <strong className="text-foreground">2. 監視・シート書き込み</strong>

@@ -8,15 +8,15 @@ import { extractItemIdFromUrl, fetchListingCondition } from "./ebay";
 
 // Keep monitoring columns fixed so old saved settings never drift writes.
 const MONITOR_COLS = {
-  lowestPrice: 8, // I
-  lowestCondition: 9, // J
-  lastCheck: 10, // K
-  alertStatus: 11, // L
-  repricedValue: 12, // M
-  evidenceUrls: 13, // N
-  trackedTargetUrl: 14, // O
-  trackedTargetCondition: 15, // P
-  trackedTargetPrice: 16, // Q
+  lowestPrice: 9, // J
+  lowestCondition: 10, // K
+  lastCheck: 11, // L
+  alertStatus: 12, // M
+  repricedValue: 13, // N
+  evidenceUrls: 14, // O
+  trackedTargetUrl: 15, // P
+  trackedTargetCondition: 16, // Q
+  trackedTargetPrice: 17, // R
 } as const;
 
 async function getSheets(): Promise<{ sheets: sheets_v4.Sheets; config: typeof spreadsheetConfigTable.$inferSelect } | null> {
@@ -105,6 +105,7 @@ export async function ensureMonitoringHeaders(): Promise<void> {
   if (!config.spreadsheetId || !config.sheetName) return;
 
   const updates = [
+    { col: 8, title: "リサーチ" }, // I
     { col: MONITOR_COLS.lowestPrice, title: "最安値(同一商品)" },
     { col: MONITOR_COLS.lowestCondition, title: "最安値コンディション" },
     { col: MONITOR_COLS.lastCheck, title: "最終チェック" },
@@ -116,14 +117,30 @@ export async function ensureMonitoringHeaders(): Promise<void> {
     { col: MONITOR_COLS.trackedTargetPrice, title: "追跡対象価格(USD)" },
   ];
 
+  const appBaseUrl =
+    process.env.APP_PUBLIC_URL?.trim() ||
+    process.env.FRONTEND_URL?.trim() ||
+    process.env.RENDER_EXTERNAL_URL?.trim() ||
+    "";
+  const ebayColLetter = columnIndexToLetter(config.ebayUrlColumnIndex ?? 1);
+  const researchFormula =
+    appBaseUrl.length > 0
+      ? `=ARRAYFORMULA(IF(LEN(${ebayColLetter}2:${ebayColLetter}),HYPERLINK("${appBaseUrl.replace(/\/$/, "")}/?row="&ROW(${ebayColLetter}2:${ebayColLetter}),"リサーチ"),""))`
+      : "";
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: config.spreadsheetId,
     requestBody: {
       valueInputOption: "USER_ENTERED",
-      data: updates.map(({ col, title }) => ({
-        range: `${config.sheetName}!${columnIndexToLetter(col)}1`,
-        values: [[title]],
-      })),
+      data: [
+        ...updates.map(({ col, title }) => ({
+          range: `${config.sheetName}!${columnIndexToLetter(col)}1`,
+          values: [[title]],
+        })),
+        ...(researchFormula
+          ? [{ range: `${config.sheetName}!I2`, values: [[researchFormula]] }]
+          : []),
+      ],
     },
   });
 }
@@ -158,7 +175,7 @@ export async function appendMonitorRowToSpreadsheet(params: {
 
   const row: any[] = Array.from({ length: maxCol + 1 }, () => "");
 
-  // Keep A-H intact for inventory management. Write monitor metadata only to I-Q.
+  // Keep A-I intact for inventory + research button. Write monitor metadata only to J-R.
   row[MONITOR_COLS.alertStatus] = "監視中";
   row[MONITOR_COLS.trackedTargetUrl] = params.ebayUrl;
   row[MONITOR_COLS.trackedTargetCondition] = params.myCondition ? String(params.myCondition) : "";
@@ -433,6 +450,13 @@ export async function syncMonitorsFromSpreadsheet(): Promise<{ created: number; 
         })
         .where(eq(monitorsTable.id, current.id));
       updated++;
+      continue;
+    }
+
+    // デフォルトではシート行から監視を自動作成しない（監視は明示操作でのみ開始）。
+    // 必要な場合のみ SHEET_AUTO_CREATE_MONITORS=true で有効化。
+    if (process.env.SHEET_AUTO_CREATE_MONITORS !== "true") {
+      skipped++;
       continue;
     }
 

@@ -10,7 +10,6 @@ import { Research } from "@/pages/research";
 import { Monitors } from "@/pages/monitors";
 import { Alerts } from "@/pages/alerts";
 import { Settings } from "@/pages/settings";
-import { InventoryMonitorPage } from "@/pages/inventory-monitor";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,7 +28,6 @@ function Router() {
       <Route path="/monitors" component={Monitors} />
       <Route path="/alerts" component={Alerts} />
       <Route path="/settings" component={Settings} />
-      <Route path="/inventory" component={InventoryMonitorPage} />
       <Route component={NotFound} />
     </Switch>
   );

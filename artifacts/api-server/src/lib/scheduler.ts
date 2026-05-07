@@ -16,7 +16,9 @@ export function startScheduler(performPriceCheck: (id: number) => Promise<any>) 
     logger.info("Running scheduled price checks");
 
     try {
-      await runMonitorSyncPipeline();
+      if (process.env.ENABLE_PERIODIC_MONITOR_SYNC === "true") {
+        await runMonitorSyncPipeline();
+      }
       const monitors = await db.select().from(monitorsTable)
         .where(eq(monitorsTable.isActive, true));
 

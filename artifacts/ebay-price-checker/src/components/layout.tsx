@@ -5,7 +5,6 @@ import {
   Search,
   Bell,
   Activity,
-  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +17,6 @@ export function Layout({ children }: LayoutProps) {
 
   const navigation = [
     { name: "リサーチ", href: "/", icon: Search },
-    { name: "在庫から監視", href: "/inventory", icon: Database },
     { name: "監視リスト", href: "/monitors", icon: Activity },
     { name: "アラート履歴", href: "/alerts", icon: Bell },
     { name: "設定", href: "/settings", icon: Settings },
