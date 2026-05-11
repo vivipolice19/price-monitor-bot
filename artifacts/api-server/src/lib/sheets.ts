@@ -117,6 +117,22 @@ function buildResearchUrl(params: { appBaseUrl: string; row: number; ebayUrl: st
   return `${base}/sheet-open?${qp.toString()}`;
 }
 
+/** Google Sheets の文字列内で " を "" にエスケープ */
+function escapeForSheetsDoubleQuotedString(s: string): string {
+  return s.replace(/"/g, '""');
+}
+
+/** I列に「リサーチ」と表示し、クリックで同じ遷移先へ飛ぶ */
+function buildResearchHyperlinkFormula(params: {
+  appBaseUrl: string;
+  row: number;
+  ebayUrl: string;
+  myPrice?: string | number;
+}): string {
+  const href = buildResearchUrl(params);
+  return `=HYPERLINK("${escapeForSheetsDoubleQuotedString(href)}","リサーチ")`;
+}
+
 async function applyResearchLinksFromSheet(params: {
   sheets: sheets_v4.Sheets;
   spreadsheetId: string;
@@ -159,7 +175,14 @@ async function applyResearchLinksFromSheet(params: {
       out.push([""]);
       continue;
     }
-    out.push([buildResearchUrl({ appBaseUrl: params.appBaseUrl, row: rowNumber, ebayUrl, myPrice })]);
+    out.push([
+      buildResearchHyperlinkFormula({
+        appBaseUrl: params.appBaseUrl,
+        row: rowNumber,
+        ebayUrl,
+        myPrice,
+      }),
+    ]);
   }
 
   // Write I column in chunks to avoid request limits.
@@ -883,18 +906,23 @@ export async function clearMonitorCells(row: number): Promise<void> {
     },
   });
 
-  // Restore I column research URL for this row (non-formula, reliable)
+  // Restore I column: 「リサーチ」表示のハイパーリンク
   const appBaseUrl = resolveAppBaseUrl();
   if (!appBaseUrl) return;
   try {
     const rowData = await getRowData(row);
     if (!rowData.found || !rowData.ebayUrl) return;
-    const url = buildResearchUrl({ appBaseUrl, row, ebayUrl: rowData.ebayUrl, myPrice: rowData.myPrice });
+    const formula = buildResearchHyperlinkFormula({
+      appBaseUrl,
+      row,
+      ebayUrl: rowData.ebayUrl,
+      myPrice: rowData.myPrice,
+    });
     await sheets.spreadsheets.values.update({
       spreadsheetId: config.spreadsheetId,
       range: `${config.sheetName}!I${row}`,
       valueInputOption: "USER_ENTERED",
-      requestBody: { values: [[url]] },
+      requestBody: { values: [[formula]] },
     });
   } catch (err) {
     logger.warn({ err, row }, "Failed to restore research cell");
